@@ -1,0 +1,6 @@
+{ "Environments" : [ { "Name" : "development" , "Address" : "http://127.0.0.1:4646" }
+                   , { "Name" : "staging" , "Address" : "http://127.0.0.1:4646" }
+                   , { "Name" : "preproduction" , "Address" : "http://127.0.0.1:4646" }
+                   , { "Name" : "production" , "Address" : "http://127.0.0.1:4646" }
+                   ]
+}

@@ -218,7 +218,7 @@ func selectCluster(g *gocui.Gui, v *gocui.View) error {
 			fmt.Fprintf(v, "%s (%s)\n", *(fullJob.Name), *(fullJob.ID))
 		}
 		v.Editable = false
-		v.Wrap = true
+		v.Wrap = false
 	}
 	if _, err := g.SetCurrentView("Jobs"); err != nil {
 		return err
@@ -248,7 +248,7 @@ func selectJob(g *gocui.Gui, v *gocui.View) error {
 			fmt.Fprintf(v, "%s (%d)\n", *(taskGroup.Name), *(taskGroup.Count))
 		}
 		v.Editable = false
-		v.Wrap = true
+		v.Wrap = false
 	}
 	if _, err := g.SetCurrentView("Task Groups"); err != nil {
 		return err
@@ -273,7 +273,7 @@ func selectTaskGroup(g *gocui.Gui, v *gocui.View) error {
 		}
 
 		v.Editable = false
-		v.Wrap = true
+		v.Wrap = false
 	}
 	if _, err := g.SetCurrentView("Tasks"); err != nil {
 		return err
@@ -300,7 +300,7 @@ func selectTask(g *gocui.Gui, v *gocui.View) error {
 		}
 
 		v.Editable = false
-		v.Wrap = true
+		v.Wrap = false
 	}
 	if _, err := g.SetCurrentView("Services"); err != nil {
 		return err

@@ -21,7 +21,7 @@ Get to revisions, and download a binary.
 
 ### CLI
 
-    ./trek <task name>
+    ./trek -ui=false <task name>
 
 ### ncurses UI
 

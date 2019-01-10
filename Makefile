@@ -8,8 +8,8 @@ trek:
 ui: trek
 	./$(BINARY_NAME)
 
-ncurses: trek
-	./$(BINARY_NAME) example
+no-ui: trek
+	./$(BINARY_NAME) -ui=false example
 
 clean:
 	rm $(BINARY_NAME)

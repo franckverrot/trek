@@ -2,9 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"os"
+	"reflect"
+	"strings"
 
 	"github.com/hashicorp/nomad/api"
 	"github.com/jroimartin/gocui"
@@ -29,6 +32,10 @@ var jobs []api.Job
 var jobsHandle *api.Jobs
 var options *api.QueryOptions
 var nomadConnectConfiguration configuration
+var showUI bool
+
+// used in CLI mode
+var jobID string
 
 func clustersViewCursorDown(g *gocui.Gui, v *gocui.View) error {
 	if v != nil {
@@ -453,6 +460,31 @@ func layout(g *gocui.Gui) error {
 	return nil
 }
 
+func checkValidFlag(flagName string, flagValue string, validValues map[string]bool) {
+	if !validValues[flagValue] {
+		usage()
+
+		keys := reflect.ValueOf(validValues).MapKeys()
+		strkeys := make([]string, len(keys))
+		for i := 0; i < len(keys); i++ {
+			strkeys[i] = keys[i].String()
+		}
+		fmt.Fprintf(os.Stderr, "\nbad value for %s, got %s, accepting: %s\n", flagName, flagValue, strings.Join(strkeys, ", "))
+		os.Exit(1)
+	}
+}
+func parseFlags() {
+	flag.BoolVar(&showUI, "ui", true, "whether to show the ncurses UI or not")
+	flag.StringVar(&jobID, "jobID", "", "jobID to get")
+
+	flag.Parse()
+}
+
+func usage() {
+	fmt.Fprintf(os.Stderr, "usage: %s [inputfile]\n", os.Args[0])
+	flag.PrintDefaults()
+}
+
 func main() {
 	//connect to nomad
 	config = api.DefaultConfig()
@@ -460,11 +492,13 @@ func main() {
 	client, err = api.NewClient(config)
 	options = &api.QueryOptions{}
 
+	parseFlags()
+
 	if err != nil {
 		log.Panicln(err)
 	}
 
-	if len(os.Args) < 2 {
+	if showUI {
 		// build ui
 		g, err := gocui.NewGui(gocui.OutputNormal)
 		if err != nil {
@@ -484,7 +518,7 @@ func main() {
 			log.Panicln(err)
 		}
 	} else {
-		jobID := os.Args[1]
+		fmt.Printf("Trying to get jobID \"%s\" (specified by -jobID)\n", jobID)
 		allocs := client.Allocations()
 		allocsListStub, _, _ := allocs.List(options)
 		found := false

@@ -180,6 +180,42 @@ func tasksViewCursorDown(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
+func selectServiceViewCursorUp(g *gocui.Gui, v *gocui.View) error {
+	if v != nil {
+		ox, oy := v.Origin()
+		cx, cy := v.Cursor()
+		if err := v.SetCursor(cx, cy-1); err != nil && oy > 0 {
+			if err := v.SetOrigin(ox, oy-1); err != nil {
+				return err
+			}
+		}
+		selectedService = cy - 1
+	}
+	return nil
+}
+func selectServiceViewCursorDown(g *gocui.Gui, v *gocui.View) error {
+	if v != nil {
+		cx, cy := v.Cursor()
+
+		// Prevent scrolling past services
+		if v.Title == "Services" {
+			numServices := len(jobs[selectedJob].TaskGroups[selectedTaskGroup].Tasks[selectedTask].Services)
+			if cy < 0 || cy >= numServices-1 {
+				return nil
+			}
+		}
+
+		if err := v.SetCursor(cx, cy+1); err != nil {
+			ox, oy := v.Origin()
+			if err := v.SetOrigin(ox, oy+1); err != nil {
+				return err
+			}
+		}
+		selectedService = cy + 1
+	}
+	return nil
+}
+
 func confirmTaskSelection(g *gocui.Gui, v *gocui.View) error {
 	var l string
 	var err error
@@ -315,6 +351,39 @@ func selectTask(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
+func selectService(g *gocui.Gui, v *gocui.View) error {
+	maxX, maxY := g.Size()
+	if v, err := g.SetView("Service", 20, 20, maxX-20, maxY-20); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		v.Title = "Service"
+		v.Highlight = true
+		v.SelBgColor = gocui.ColorGreen
+		v.SelFgColor = gocui.ColorBlack
+
+		service := jobs[selectedJob].TaskGroups[selectedTaskGroup].Tasks[selectedTask].Services[selectedService]
+
+		val := reflect.Indirect(reflect.ValueOf(service))
+		valType := val.Type()
+
+		for i := 0; i < val.NumField(); i++ {
+			field := valType.Field(i)
+			value := val.FieldByName(field.Name).Interface()
+			name := field.Name
+
+			fmt.Fprintf(v, "%s: %+v\n", name, value)
+		}
+
+		v.Editable = false
+		v.Wrap = false
+	}
+	if _, err := g.SetCurrentView("Service"); err != nil {
+		return err
+	}
+	return nil
+}
+
 func clearJobsView(g *gocui.Gui, v *gocui.View) error {
 	if err := g.DeleteView("Jobs"); err != nil {
 		return err
@@ -353,6 +422,17 @@ func clearServicesView(g *gocui.Gui, v *gocui.View) error {
 		return err
 	}
 	if _, err := g.SetCurrentView("Tasks"); err != nil {
+		return err
+	}
+	selectedService = 0
+	return nil
+}
+
+func clearServiceView(g *gocui.Gui, v *gocui.View) error {
+	if err := g.DeleteView("Service"); err != nil {
+		return err
+	}
+	if _, err := g.SetCurrentView("Services"); err != nil {
 		return err
 	}
 	selectedService = 0
@@ -401,6 +481,12 @@ var bindings = []binding{
 	binding{panelName: "Tasks", key: gocui.KeyArrowUp, handler: tasksViewCursorUp},
 
 	binding{panelName: "Services", key: gocui.KeyArrowLeft, handler: clearServicesView},
+	binding{panelName: "Services", key: gocui.KeyEnter, handler: selectService},
+	binding{panelName: "Services", key: gocui.KeyArrowRight, handler: selectService},
+	binding{panelName: "Services", key: gocui.KeyArrowDown, handler: selectServiceViewCursorDown},
+	binding{panelName: "Services", key: gocui.KeyArrowUp, handler: selectServiceViewCursorUp},
+
+	binding{panelName: "Service", key: gocui.KeyEnter, handler: clearServiceView},
 
 	binding{panelName: "", key: gocui.KeyCtrlC, handler: quit},
 	binding{panelName: "msg", key: gocui.KeyEnter, handler: clearConfirmation},

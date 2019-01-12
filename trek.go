@@ -380,6 +380,7 @@ var bindings = []binding{
 		handler: deleteView("Service", "Services", func(trekState *trekStateType) {})},
 
 	binding{panelName: "", key: gocui.KeyCtrlC, handler: quit},
+	binding{panelName: "", key: gocui.KeyF12, handler: quit},
 	binding{panelName: "msg", key: gocui.KeyEnter,
 		handler: deleteView("msg", "Tasks", func(trekState *trekStateType) {})},
 }
@@ -415,8 +416,8 @@ func getBounds(maxX int, maxY int, currentPanel int, totalPanels int, margin int
 		startX = currentPanel * width
 		endX = startX + width - 1
 	}
-	endY = maxY - 1
-	startY := 2
+	endY = maxY - 1 // to see the border
+	startY := 2     // menu_view
 
 	return boundsType{
 		startX: startX + margin,
@@ -432,16 +433,16 @@ func layout(trekState *trekStateType) layoutType {
 		if inited {
 			return nil
 		}
-		title := "Welcome to Trek!"
+		title := "Trek"
 
-		// Show headers
+		// Show menu
 		maxX, _ := g.Size()
-		padding := (maxX-1)/2 - (len(title) / 2)
-		startX := padding
-		startY := 0
-		endX := padding + len(title)
-		endY := 2
-		if v, err := g.SetView("title_padding", startX, startY, endX, endY); err != nil {
+		startX := -1 // no frame
+		startY := -1 // no frame
+		endX := maxX - 1
+		endY := 1
+		offset := 0
+		if v, err := g.SetView("title_view", startX, startY, endX, endY); err != nil {
 			if err != gocui.ErrUnknownView {
 				return err
 			}
@@ -449,7 +450,28 @@ func layout(trekState *trekStateType) layoutType {
 			v.Frame = false
 			v.SelBgColor = gocui.ColorBlue
 			v.SelFgColor = gocui.ColorBlack
-			fmt.Fprintf(v, "%*s", 5, title)
+			fmt.Fprintf(v, "%s", title)
+			offset += len(title)
+		}
+
+		offset += 2
+		menu_items := []string{"F1:DEBUG", "F12:EXIT"}
+
+		if v, err := g.SetView("menu_items", startX+offset, startY, endX, endY); err != nil {
+			if err != gocui.ErrUnknownView {
+				return err
+			}
+			v.Highlight = false
+			v.Frame = false
+			v.BgColor = gocui.ColorGreen
+			v.FgColor = gocui.ColorBlack
+
+			for index, optionName := range menu_items {
+				if index > 0 {
+					fmt.Fprintf(v, " | ")
+				}
+				fmt.Fprintf(v, "%s", optionName)
+			}
 		}
 
 		inited = true

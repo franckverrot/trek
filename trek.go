@@ -24,47 +24,43 @@ type cursorPosition struct {
 	x int
 	y int
 }
-type clearViewCallback func(uiState *uiStateType)
-type cursorCallback func(uiState *uiStateType, position cursorPosition)
-type numElementsComputerCallback func(uiState *uiStateType) int
+type layoutType func(g *gocui.Gui) error
+type clearViewCallback func(trekState *trekStateType)
+type cursorCallback func(trekState *trekStateType, position cursorPosition)
+type numElementsComputerCallback func(trekState *trekStateType) int
 type uiHandlerType func(g *gocui.Gui, v *gocui.View) error
-type uiHandlerWithStateType func(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error
-
-type uiStateType struct {
-	selectedCluster   int
-	selectedJob       int
-	selectedTaskGroup int
-	selectedTask      int
-	selectedService   int
-	showUI            bool
-}
+type uiHandlerWithStateType func(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error
 
 type trekStateType struct {
-	config                    *nomad.Config
+	selectedCluster           int
+	selectedJob               int
+	selectedTaskGroup         int
+	selectedTask              int
+	selectedService           int
+	showUI                    bool
 	client                    *nomad.Client
 	jobs                      []nomad.Job
 	jobsHandle                *nomad.Jobs
 	nomadConnectConfiguration configuration
 }
 
-var trekState trekStateType
 var options *nomad.QueryOptions
 
 // used in CLI mode
 var jobID string
 
-func stateify(handler uiHandlerWithStateType, uiState *uiStateType) uiHandlerType {
+func stateify(handler uiHandlerWithStateType, trekState *trekStateType) uiHandlerType {
 	return func(g *gocui.Gui, v *gocui.View) error {
-		return handler(g, v, uiState)
+		return handler(g, v, trekState)
 	}
 }
 
 func cursorDown(handler cursorCallback, numElementsComputer numElementsComputerCallback) uiHandlerWithStateType {
-	return func(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
+	return func(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 		if v != nil {
 			cx, cy := v.Cursor()
 
-			if cy >= numElementsComputer(uiState)-1 {
+			if cy >= numElementsComputer(trekState)-1 {
 				return nil
 			}
 
@@ -74,7 +70,7 @@ func cursorDown(handler cursorCallback, numElementsComputer numElementsComputerC
 					return err
 				}
 			} else {
-				handler(uiState, cursorPosition{x: cx, y: cy + 1})
+				handler(trekState, cursorPosition{x: cx, y: cy + 1})
 			}
 
 		}
@@ -83,7 +79,7 @@ func cursorDown(handler cursorCallback, numElementsComputer numElementsComputerC
 }
 
 func cursorUp(handler cursorCallback) uiHandlerWithStateType {
-	return func(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
+	return func(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 		if v != nil {
 			ox, oy := v.Origin()
 			cx, cy := v.Cursor()
@@ -95,14 +91,14 @@ func cursorUp(handler cursorCallback) uiHandlerWithStateType {
 					return err
 				}
 			} else {
-				handler(uiState, cursorPosition{x: cx, y: cy - 1})
+				handler(trekState, cursorPosition{x: cx, y: cy - 1})
 			}
 		}
 		return nil
 	}
 }
 
-func confirmTaskSelection(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
+func confirmTaskSelection(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 	var l string
 	var err error
 
@@ -124,11 +120,11 @@ func confirmTaskSelection(g *gocui.Gui, v *gocui.View, uiState *uiStateType) err
 	return nil
 }
 
-func quit(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
+func quit(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 	return gocui.ErrQuit
 }
 
-func selectCluster(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
+func selectCluster(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 	_, maxY := g.Size()
 	if v, err := g.SetView("Jobs", 30, 2, 60, maxY-1); err != nil {
 		if err != gocui.ErrUnknownView {
@@ -155,14 +151,14 @@ func selectCluster(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	return nil
 }
 
-func selectJob(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
+func selectJob(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 	_, maxY := g.Size()
 
 	if len(trekState.jobs) < 1 {
 		return nil
 	}
 
-	job := trekState.jobs[uiState.selectedJob]
+	job := trekState.jobs[trekState.selectedJob]
 
 	if v, err := g.SetView("Task Groups", 60, 2, 90, maxY-1); err != nil {
 		if err != gocui.ErrUnknownView {
@@ -184,7 +180,7 @@ func selectJob(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	}
 	return nil
 }
-func selectTaskGroup(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
+func selectTaskGroup(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 	_, maxY := g.Size()
 	if v, err := g.SetView("Tasks", 90, 2, 120, maxY-1); err != nil {
 		if err != gocui.ErrUnknownView {
@@ -195,7 +191,7 @@ func selectTaskGroup(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 		v.SelBgColor = gocui.ColorGreen
 		v.SelFgColor = gocui.ColorBlack
 
-		taskGroup := trekState.jobs[uiState.selectedJob].TaskGroups[uiState.selectedTaskGroup]
+		taskGroup := trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedTaskGroup]
 
 		for _, task := range taskGroup.Tasks {
 			fmt.Fprintf(v, "%s (%s)\n", (task.Name), (task.Driver))
@@ -210,7 +206,7 @@ func selectTaskGroup(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	return nil
 }
 
-func selectTask(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
+func selectTask(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 	// confirmTaskSelection(g, v)
 	_, maxY := g.Size()
 	if v, err := g.SetView("Services", 120, 2, 150, maxY-1); err != nil {
@@ -222,7 +218,7 @@ func selectTask(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 		v.SelBgColor = gocui.ColorGreen
 		v.SelFgColor = gocui.ColorBlack
 
-		task := trekState.jobs[uiState.selectedJob].TaskGroups[uiState.selectedTaskGroup].Tasks[uiState.selectedTask]
+		task := trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedTaskGroup].Tasks[trekState.selectedTask]
 
 		for _, service := range task.Services {
 			fmt.Fprintf(v, "%s\n", (service.Name))
@@ -237,7 +233,7 @@ func selectTask(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	return nil
 }
 
-func selectService(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
+func selectService(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 	maxX, maxY := g.Size()
 	if v, err := g.SetView("Service", 20, 20, maxX-20, maxY-20); err != nil {
 		if err != gocui.ErrUnknownView {
@@ -248,7 +244,7 @@ func selectService(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 		v.SelBgColor = gocui.ColorGreen
 		v.SelFgColor = gocui.ColorBlack
 
-		service := trekState.jobs[uiState.selectedJob].TaskGroups[uiState.selectedTaskGroup].Tasks[uiState.selectedTask].Services[uiState.selectedService]
+		service := trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedTaskGroup].Tasks[trekState.selectedTask].Services[trekState.selectedService]
 
 		val := reflect.Indirect(reflect.ValueOf(service))
 		valType := val.Type()
@@ -271,14 +267,14 @@ func selectService(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 }
 
 func clearView(currentView string, newCurrentView string, handler clearViewCallback) uiHandlerWithStateType {
-	return func(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
+	return func(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 		if err := g.DeleteView(currentView); err != nil {
 			return err
 		}
 		if _, err := g.SetCurrentView(newCurrentView); err != nil {
 			return err
 		}
-		handler(uiState)
+		handler(trekState)
 		return nil
 	}
 }
@@ -294,78 +290,78 @@ var bindings = []binding{
 	binding{panelName: "Clusters", key: gocui.KeyEnter, handler: selectCluster},
 	binding{panelName: "Clusters", key: gocui.KeyArrowRight, handler: selectCluster},
 	binding{panelName: "Clusters", key: gocui.KeyArrowDown, handler: cursorDown(
-		func(uiState *uiStateType, position cursorPosition) { uiState.selectedCluster = position.y },
-		func(uiState *uiStateType) int { return len(trekState.nomadConnectConfiguration.Environments) })},
+		func(trekState *trekStateType, position cursorPosition) { trekState.selectedCluster = position.y },
+		func(trekState *trekStateType) int { return len(trekState.nomadConnectConfiguration.Environments) })},
 	binding{panelName: "Clusters", key: gocui.KeyArrowUp,
-		handler: cursorUp(func(uiState *uiStateType, position cursorPosition) {
-			uiState.selectedCluster = position.y
+		handler: cursorUp(func(trekState *trekStateType, position cursorPosition) {
+			trekState.selectedCluster = position.y
 		})},
 
 	binding{panelName: "Jobs", key: gocui.KeyArrowLeft,
-		handler: clearView("Jobs", "Clusters", func(uiState *uiStateType) { uiState.selectedJob = 0 })},
+		handler: clearView("Jobs", "Clusters", func(trekState *trekStateType) { trekState.selectedJob = 0 })},
 	binding{panelName: "Jobs", key: gocui.KeyEnter, handler: selectJob},
 	binding{panelName: "Jobs", key: gocui.KeyArrowRight, handler: selectJob},
 	binding{panelName: "Jobs", key: gocui.KeyArrowUp,
-		handler: cursorUp(func(uiState *uiStateType, position cursorPosition) {
-			uiState.selectedJob = position.y
+		handler: cursorUp(func(trekState *trekStateType, position cursorPosition) {
+			trekState.selectedJob = position.y
 		})},
 	binding{panelName: "Jobs", key: gocui.KeyArrowDown, handler: cursorDown(
-		func(uiState *uiStateType, position cursorPosition) { uiState.selectedJob = position.y },
-		func(uiState *uiStateType) int { return len(trekState.jobs) })},
+		func(trekState *trekStateType, position cursorPosition) { trekState.selectedJob = position.y },
+		func(trekState *trekStateType) int { return len(trekState.jobs) })},
 
 	binding{panelName: "Task Groups", key: gocui.KeyArrowLeft,
-		handler: clearView("Task Groups", "Jobs", func(uiState *uiStateType) { uiState.selectedTaskGroup = 0 })},
+		handler: clearView("Task Groups", "Jobs", func(trekState *trekStateType) { trekState.selectedTaskGroup = 0 })},
 	binding{panelName: "Task Groups", key: gocui.KeyEnter, handler: selectTaskGroup},
 	binding{panelName: "Task Groups", key: gocui.KeyArrowRight, handler: selectTaskGroup},
 	binding{panelName: "Task Groups", key: gocui.KeyArrowDown, handler: cursorDown(
-		func(uiState *uiStateType, position cursorPosition) { uiState.selectedTaskGroup = position.y },
-		func(uiState *uiStateType) int { return len(trekState.jobs[uiState.selectedJob].TaskGroups) })},
+		func(trekState *trekStateType, position cursorPosition) { trekState.selectedTaskGroup = position.y },
+		func(trekState *trekStateType) int { return len(trekState.jobs[trekState.selectedJob].TaskGroups) })},
 	binding{panelName: "Task Groups", key: gocui.KeyArrowUp,
-		handler: cursorUp(func(uiState *uiStateType, position cursorPosition) {
-			uiState.selectedTaskGroup = position.y
+		handler: cursorUp(func(trekState *trekStateType, position cursorPosition) {
+			trekState.selectedTaskGroup = position.y
 		})},
 
 	binding{panelName: "Tasks", key: gocui.KeyArrowLeft,
-		handler: clearView("Tasks", "Task Groups", func(uiState *uiStateType) { uiState.selectedTask = 0 })},
+		handler: clearView("Tasks", "Task Groups", func(trekState *trekStateType) { trekState.selectedTask = 0 })},
 	binding{panelName: "Tasks", key: gocui.KeyEnter, handler: selectTask},
 	binding{panelName: "Tasks", key: gocui.KeyArrowRight, handler: selectTask},
 	binding{panelName: "Tasks", key: gocui.KeyArrowDown,
 		handler: cursorDown(
-			func(uiState *uiStateType, position cursorPosition) { uiState.selectedTask = position.y },
-			func(uiState *uiStateType) int {
-				return len(trekState.jobs[uiState.selectedJob].TaskGroups[uiState.selectedTaskGroup].Tasks)
+			func(trekState *trekStateType, position cursorPosition) { trekState.selectedTask = position.y },
+			func(trekState *trekStateType) int {
+				return len(trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedTaskGroup].Tasks)
 			})},
 	binding{panelName: "Tasks", key: gocui.KeyArrowUp,
-		handler: cursorUp(func(uiState *uiStateType, position cursorPosition) {
-			uiState.selectedTask = position.y
+		handler: cursorUp(func(trekState *trekStateType, position cursorPosition) {
+			trekState.selectedTask = position.y
 		})},
 
 	binding{panelName: "Services", key: gocui.KeyArrowLeft,
-		handler: clearView("Services", "Tasks", func(uiState *uiStateType) { uiState.selectedService = 0 })},
+		handler: clearView("Services", "Tasks", func(trekState *trekStateType) { trekState.selectedService = 0 })},
 	binding{panelName: "Services", key: gocui.KeyEnter, handler: selectService},
 	binding{panelName: "Services", key: gocui.KeyArrowRight, handler: selectService},
 	binding{panelName: "Services", key: gocui.KeyArrowDown,
 		handler: cursorDown(
-			func(uiState *uiStateType, position cursorPosition) { uiState.selectedService = position.y },
-			func(uiState *uiStateType) int {
-				return len(trekState.jobs[uiState.selectedJob].TaskGroups[uiState.selectedTaskGroup].Tasks[uiState.selectedTask].Services)
+			func(trekState *trekStateType, position cursorPosition) { trekState.selectedService = position.y },
+			func(trekState *trekStateType) int {
+				return len(trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedTaskGroup].Tasks[trekState.selectedTask].Services)
 			})},
 	binding{panelName: "Services", key: gocui.KeyArrowUp,
-		handler: cursorUp(func(uiState *uiStateType, position cursorPosition) {
-			uiState.selectedService = position.y
+		handler: cursorUp(func(trekState *trekStateType, position cursorPosition) {
+			trekState.selectedService = position.y
 		})},
 
 	binding{panelName: "Service", key: gocui.KeyEnter,
-		handler: clearView("Service", "Services", func(uiState *uiStateType) {})},
+		handler: clearView("Service", "Services", func(trekState *trekStateType) {})},
 
 	binding{panelName: "", key: gocui.KeyCtrlC, handler: quit},
 	binding{panelName: "msg", key: gocui.KeyEnter,
-		handler: clearView("msg", "Tasks", func(uiState *uiStateType) {})},
+		handler: clearView("msg", "Tasks", func(trekState *trekStateType) {})},
 }
 
-func keybindings(g *gocui.Gui, uiState *uiStateType) error {
+func keybindings(g *gocui.Gui, trekState *trekStateType) error {
 	for _, binding := range bindings {
-		if err := g.SetKeybinding(binding.panelName, binding.key, gocui.ModNone, stateify(binding.handler, uiState)); err != nil {
+		if err := g.SetKeybinding(binding.panelName, binding.key, gocui.ModNone, stateify(binding.handler, trekState)); err != nil {
 			return err
 		}
 	}
@@ -373,48 +369,50 @@ func keybindings(g *gocui.Gui, uiState *uiStateType) error {
 	return nil
 }
 
-func layout(g *gocui.Gui) error {
-	maxX, maxY := g.Size()
-	title := "Welcome to Nomad Connect!"
-	padding := (maxX-1)/2 - (len(title) / 2)
-	if v, err := g.SetView("title_padding", padding, 0, padding+len(title)+1, 2); err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
+func layout(trekState *trekStateType) layoutType {
+	return func(g *gocui.Gui) error {
+		maxX, maxY := g.Size()
+		title := "Welcome to Nomad Connect!"
+		padding := (maxX-1)/2 - (len(title) / 2)
+		if v, err := g.SetView("title_padding", padding, 0, padding+len(title)+1, 2); err != nil {
+			if err != gocui.ErrUnknownView {
+				return err
+			}
+			v.Highlight = true
+			v.Frame = false
+			v.SelBgColor = gocui.ColorBlue
+			v.SelFgColor = gocui.ColorBlack
+			fmt.Fprintf(v, "%*s", 5, title)
 		}
-		v.Highlight = true
-		v.Frame = false
-		v.SelBgColor = gocui.ColorBlue
-		v.SelFgColor = gocui.ColorBlack
-		fmt.Fprintf(v, "%*s", 5, title)
-	}
-	if v, err := g.SetView("Clusters", 0, 2, 30, maxY-1); err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
-		}
-		v.Highlight = true
-		v.SelBgColor = gocui.ColorGreen
-		v.SelFgColor = gocui.ColorBlack
-		v.Title = "Clusters"
-		file, err := os.Open(".trek.rc")
-		if err != nil {
-			log.Panicln(err)
-		}
-		decoder := json.NewDecoder(file)
-		trekState.nomadConnectConfiguration = configuration{}
-		err = decoder.Decode(&trekState.nomadConnectConfiguration)
-		if err != nil {
-			log.Panicln(err)
-		}
+		if v, err := g.SetView("Clusters", 0, 2, 30, maxY-1); err != nil {
+			if err != gocui.ErrUnknownView {
+				return err
+			}
+			v.Highlight = true
+			v.SelBgColor = gocui.ColorGreen
+			v.SelFgColor = gocui.ColorBlack
+			v.Title = "Clusters"
+			file, err := os.Open(".trek.rc")
+			if err != nil {
+				log.Panicln(err)
+			}
+			decoder := json.NewDecoder(file)
+			trekState.nomadConnectConfiguration = configuration{}
+			err = decoder.Decode(&trekState.nomadConnectConfiguration)
+			if err != nil {
+				log.Panicln(err)
+			}
 
-		for _, env := range trekState.nomadConnectConfiguration.Environments {
-			fmt.Fprintf(v, "%s\n", env.Name)
-		}
+			for _, env := range trekState.nomadConnectConfiguration.Environments {
+				fmt.Fprintf(v, "%s\n", env.Name)
+			}
 
-		if _, err := g.SetCurrentView("Clusters"); err != nil {
-			return err
+			if _, err := g.SetCurrentView("Clusters"); err != nil {
+				return err
+			}
 		}
+		return nil
 	}
-	return nil
 }
 
 func checkValidFlag(flagName string, flagValue string, validValues map[string]bool) {
@@ -430,8 +428,8 @@ func checkValidFlag(flagName string, flagValue string, validValues map[string]bo
 		os.Exit(1)
 	}
 }
-func parseFlags(uiState *uiStateType) {
-	flag.BoolVar(&uiState.showUI, "ui", true, "whether to show the ncurses UI or not")
+func parseFlags(trekState *trekStateType) {
+	flag.BoolVar(&trekState.showUI, "ui", true, "whether to show the ncurses UI or not")
 	flag.StringVar(&jobID, "jobID", "", "jobID to get")
 
 	flag.Parse()
@@ -444,19 +442,19 @@ func usage() {
 
 func main() {
 	//connect to nomad
-	uiState := new(uiStateType)
-	trekState.config = nomad.DefaultConfig()
-	var err error
-	trekState.client, err = nomad.NewClient(trekState.config)
+	trekState := new(trekStateType)
 	options = &nomad.QueryOptions{}
 
-	parseFlags(uiState)
+	var err error
+	trekState.client, err = nomad.NewClient(nomad.DefaultConfig())
+
+	parseFlags(trekState)
 
 	if err != nil {
 		log.Panicln(err)
 	}
 
-	if uiState.showUI {
+	if trekState.showUI {
 		// build ui
 		g, err := gocui.NewGui(gocui.OutputNormal)
 		if err != nil {
@@ -466,9 +464,9 @@ func main() {
 
 		g.Cursor = true
 
-		g.SetManagerFunc(layout)
+		g.SetManagerFunc(layout(trekState))
 
-		if err := keybindings(g, uiState); err != nil {
+		if err := keybindings(g, trekState); err != nil {
 			log.Panicln(err)
 		}
 

@@ -426,11 +426,11 @@ func getBounds(maxX int, maxY int, currentPanel int, totalPanels int, margin int
 		endY:   endY - margin}
 }
 
-var inited bool = false
+var initialized bool = false
 
 func layout(trekState *trekStateType) layoutType {
 	return func(g *gocui.Gui) error {
-		if inited {
+		if initialized {
 			return nil
 		}
 		title := "Trek"
@@ -474,7 +474,7 @@ func layout(trekState *trekStateType) layoutType {
 			}
 		}
 
-		inited = true
+		initialized = true
 		return createView(g, trekState,
 			trekView{
 				name: "Clusters",

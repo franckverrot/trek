@@ -40,7 +40,6 @@ type trekStateType struct {
 	showUI                    bool
 	client                    *nomad.Client
 	jobs                      []nomad.Job
-	jobsHandle                *nomad.Jobs
 	nomadConnectConfiguration configuration
 }
 
@@ -123,36 +122,37 @@ func quit(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 }
 
 func selectCluster(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
-	_, maxY := g.Size()
-	if v, err := g.SetView("Jobs", 30, 2, 60, maxY-1); err != nil {
+	maxX, maxY := g.Size()
+	newViewTitle := "Jobs"
+	bounds := getBounds(maxX, maxY, 1, 5, 0)
+	if v, err := g.SetView(newViewTitle, bounds.startX, bounds.startY, bounds.endX, bounds.endY); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = "Jobs"
+		v.Title = newViewTitle
 		v.Highlight = true
 		v.SelBgColor = gocui.ColorGreen
 		v.SelFgColor = gocui.ColorBlack
-		trekState.jobsHandle = trekState.client.Jobs()
 
 		options := &nomad.QueryOptions{}
-		jobListStubs, _, _ := trekState.jobsHandle.List(options)
+		jobListStubs, _, _ := trekState.client.Jobs().List(options)
 		trekState.jobs = make([]nomad.Job, 0)
 		for _, job := range jobListStubs {
-			fullJob, _, _ := trekState.jobsHandle.Info(job.ID, options)
+			fullJob, _, _ := trekState.client.Jobs().Info(job.ID, options)
 			trekState.jobs = append(trekState.jobs, *fullJob)
 			fmt.Fprintf(v, "%s (%s)\n", *(fullJob.Name), *(fullJob.ID))
 		}
 		v.Editable = false
 		v.Wrap = false
 	}
-	if _, err := g.SetCurrentView("Jobs"); err != nil {
+	if _, err := g.SetCurrentView(newViewTitle); err != nil {
 		return err
 	}
 	return nil
 }
 
 func selectJob(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
-	_, maxY := g.Size()
+	maxX, maxY := g.Size()
 
 	if len(trekState.jobs) < 1 {
 		return nil
@@ -160,11 +160,13 @@ func selectJob(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 
 	job := trekState.jobs[trekState.selectedJob]
 
-	if v, err := g.SetView("Task Groups", 60, 2, 90, maxY-1); err != nil {
+	newViewTitle := "Task Groups"
+	bounds := getBounds(maxX, maxY, 2, 5, 0)
+	if v, err := g.SetView(newViewTitle, bounds.startX, bounds.startY, bounds.endX, bounds.endY); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = "Task Groups"
+		v.Title = newViewTitle
 		v.Highlight = true
 		v.SelBgColor = gocui.ColorGreen
 		v.SelFgColor = gocui.ColorBlack
@@ -175,18 +177,20 @@ func selectJob(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 		v.Editable = false
 		v.Wrap = false
 	}
-	if _, err := g.SetCurrentView("Task Groups"); err != nil {
+	if _, err := g.SetCurrentView(newViewTitle); err != nil {
 		return err
 	}
 	return nil
 }
 func selectTaskGroup(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
-	_, maxY := g.Size()
-	if v, err := g.SetView("Tasks", 90, 2, 120, maxY-1); err != nil {
+	maxX, maxY := g.Size()
+	newViewTitle := "Tasks"
+	bounds := getBounds(maxX, maxY, 3, 5, 0)
+	if v, err := g.SetView(newViewTitle, bounds.startX, bounds.startY, bounds.endX, bounds.endY); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = "Tasks"
+		v.Title = newViewTitle
 		v.Highlight = true
 		v.SelBgColor = gocui.ColorGreen
 		v.SelFgColor = gocui.ColorBlack
@@ -200,20 +204,21 @@ func selectTaskGroup(g *gocui.Gui, v *gocui.View, trekState *trekStateType) erro
 		v.Editable = false
 		v.Wrap = false
 	}
-	if _, err := g.SetCurrentView("Tasks"); err != nil {
+	if _, err := g.SetCurrentView(newViewTitle); err != nil {
 		return err
 	}
 	return nil
 }
 
 func selectTask(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
-	// confirmTaskSelection(g, v)
-	_, maxY := g.Size()
-	if v, err := g.SetView("Services", 120, 2, 150, maxY-1); err != nil {
+	maxX, maxY := g.Size()
+	newViewTitle := "Services"
+	bounds := getBounds(maxX, maxY, 4, 5, 0)
+	if v, err := g.SetView(newViewTitle, bounds.startX, bounds.startY, bounds.endX, bounds.endY); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = "Services"
+		v.Title = newViewTitle
 		v.Highlight = true
 		v.SelBgColor = gocui.ColorGreen
 		v.SelFgColor = gocui.ColorBlack
@@ -227,7 +232,7 @@ func selectTask(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 		v.Editable = false
 		v.Wrap = false
 	}
-	if _, err := g.SetCurrentView("Services"); err != nil {
+	if _, err := g.SetCurrentView(newViewTitle); err != nil {
 		return err
 	}
 	return nil
@@ -235,11 +240,13 @@ func selectTask(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 
 func selectService(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 	maxX, maxY := g.Size()
-	if v, err := g.SetView("Service", 20, 20, maxX-20, maxY-20); err != nil {
+	newViewTitle := "Service"
+	bounds := getBounds(maxX, maxY, 0, 1, 10)
+	if v, err := g.SetView(newViewTitle, bounds.startX, bounds.startY, bounds.endX, bounds.endY); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = "Service"
+		v.Title = newViewTitle
 		v.Highlight = true
 		v.SelBgColor = gocui.ColorGreen
 		v.SelFgColor = gocui.ColorBlack
@@ -260,7 +267,7 @@ func selectService(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error 
 		v.Editable = false
 		v.Wrap = false
 	}
-	if _, err := g.SetCurrentView("Service"); err != nil {
+	if _, err := g.SetCurrentView(newViewTitle); err != nil {
 		return err
 	}
 	return nil
@@ -369,10 +376,41 @@ func keybindings(g *gocui.Gui, trekState *trekStateType) error {
 	return nil
 }
 
+type boundsType struct {
+	startX int
+	startY int
+	endX   int
+	endY   int
+}
+
+func getBounds(maxX int, maxY int, currentPanel int, totalPanels int, margin int) boundsType {
+	var startX int
+	var width int
+	var endX int
+	var endY int
+	if maxX <= 80 {
+		startX = currentPanel * 0
+		width = maxX - 1
+		endX = width
+	} else {
+		width = (maxX / totalPanels)
+		startX = currentPanel * width
+		endX = startX + width - 1
+	}
+	endY = maxY - 1
+	startY := 2
+
+	return boundsType{
+		startX: startX + margin,
+		startY: startY + margin,
+		endX:   endX - margin,
+		endY:   endY - margin}
+}
+
 func layout(trekState *trekStateType) layoutType {
 	return func(g *gocui.Gui) error {
 		maxX, maxY := g.Size()
-		title := "Welcome to Nomad Connect!"
+		title := "Welcome to Trek!"
 		padding := (maxX-1)/2 - (len(title) / 2)
 		if v, err := g.SetView("title_padding", padding, 0, padding+len(title)+1, 2); err != nil {
 			if err != gocui.ErrUnknownView {
@@ -384,7 +422,10 @@ func layout(trekState *trekStateType) layoutType {
 			v.SelFgColor = gocui.ColorBlack
 			fmt.Fprintf(v, "%*s", 5, title)
 		}
-		if v, err := g.SetView("Clusters", 0, 2, 30, maxY-1); err != nil {
+
+		bounds := getBounds(maxX, maxY, 0, 5, 0)
+		newViewTitle := "Clusters"
+		if v, err := g.SetView(newViewTitle, bounds.startX, bounds.startY, bounds.endX, bounds.endY); err != nil {
 			if err != gocui.ErrUnknownView {
 				return err
 			}
@@ -440,10 +481,74 @@ func usage() {
 	flag.PrintDefaults()
 }
 
+func showUI(trekState *trekStateType) {
+	// build ui
+	g, err := gocui.NewGui(gocui.OutputNormal)
+	if err != nil {
+		log.Panicln(err)
+	}
+	defer g.Close()
+
+	g.Cursor = true
+
+	g.SetManagerFunc(layout(trekState))
+
+	if err := keybindings(g, trekState); err != nil {
+		log.Panicln(err)
+	}
+
+	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
+		log.Panicln(err)
+	}
+}
+
+func showCLI(trekState *trekStateType) {
+	options := &nomad.QueryOptions{}
+	allocs := trekState.client.Allocations()
+	allocsListStub, _, _ := allocs.List(options)
+	foundAllocations := make([]nomad.Allocation, 0)
+	for _, stub := range allocsListStub {
+		alloc, _, err := allocs.Info(stub.ID, options)
+		if err != nil {
+			log.Panicln(err)
+		}
+		if alloc.JobID == jobID {
+			foundAllocations = append(foundAllocations, *alloc)
+		}
+	}
+	if len(foundAllocations) == 0 {
+		jobsHandle := trekState.client.Jobs()
+		jobs, _, _ := jobsHandle.List(nil)
+
+		fmt.Printf("\"%s\" Not found.  Available jobs:\n", jobID)
+		for index, job := range jobs {
+			fmt.Printf("\t%d) %s\n", index+1, job.ID)
+		}
+	} else {
+		nodes := trekState.client.Nodes()
+
+		for _, foundAllocation := range foundAllocations {
+			node, _, err := nodes.Info(foundAllocation.NodeID, options)
+			ip := node.Attributes["unique.network.ip-address"]
+			if err != nil {
+				log.Panicln(err)
+			}
+			fmt.Printf("%s (%s)\n", foundAllocation.Name, foundAllocation.ID)
+			for _, task := range foundAllocation.TaskResources {
+				for _, network := range task.Networks {
+					for _, dynPort := range network.DynamicPorts {
+						fmt.Printf("\t%s => %s:%d\n", dynPort.Label, ip, dynPort.Value)
+					}
+				}
+			}
+		}
+
+	}
+}
+
 func main() {
 	//connect to nomad
 	trekState := new(trekStateType)
-	options := &nomad.QueryOptions{}
 
 	var err error
 	trekState.client, err = nomad.NewClient(nomad.DefaultConfig())
@@ -455,64 +560,8 @@ func main() {
 	}
 
 	if trekState.showUI {
-		// build ui
-		g, err := gocui.NewGui(gocui.OutputNormal)
-		if err != nil {
-			log.Panicln(err)
-		}
-		defer g.Close()
-
-		g.Cursor = true
-
-		g.SetManagerFunc(layout(trekState))
-
-		if err := keybindings(g, trekState); err != nil {
-			log.Panicln(err)
-		}
-
-		if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
-			log.Panicln(err)
-		}
+		showUI(trekState)
 	} else {
-		allocs := trekState.client.Allocations()
-		allocsListStub, _, _ := allocs.List(options)
-		foundAllocations := make([]nomad.Allocation, 0)
-		for _, stub := range allocsListStub {
-			alloc, _, err := allocs.Info(stub.ID, options)
-			if err != nil {
-				log.Panicln(err)
-			}
-			if alloc.JobID == jobID {
-				foundAllocations = append(foundAllocations, *alloc)
-			}
-		}
-		if len(foundAllocations) == 0 {
-			jobsHandle := trekState.client.Jobs()
-			jobs, _, _ := jobsHandle.List(nil)
-
-			fmt.Printf("\"%s\" Not found.  Available jobs:\n", jobID)
-			for index, job := range jobs {
-				fmt.Printf("\t%d) %s\n", index+1, job.ID)
-			}
-		} else {
-			nodes := trekState.client.Nodes()
-
-			for _, foundAllocation := range foundAllocations {
-				node, _, err := nodes.Info(foundAllocation.NodeID, options)
-				ip := node.Attributes["unique.network.ip-address"]
-				if err != nil {
-					log.Panicln(err)
-				}
-				fmt.Printf("%s (%s)\n", foundAllocation.Name, foundAllocation.ID)
-				for _, task := range foundAllocation.TaskResources {
-					for _, network := range task.Networks {
-						for _, dynPort := range network.DynamicPorts {
-							fmt.Printf("\t%s => %s:%d\n", dynPort.Label, ip, dynPort.Value)
-						}
-					}
-				}
-			}
-
-		}
+		showCLI(trekState)
 	}
 }

@@ -24,8 +24,18 @@ type cursorPosition struct {
 	x int
 	y int
 }
+type trekView struct {
+	name                    string
+	foregroundAfterCreation bool
+	panelNum                int
+	panelsTotal             int
+	margin                  int
+	handler                 viewHandlerCallback
+}
+
 type layoutType func(g *gocui.Gui) error
-type clearViewCallback func(trekState *trekStateType)
+type viewHandlerCallback func(view *gocui.View, trekState *trekStateType) error
+type deleteViewCallback func(trekState *trekStateType)
 type cursorCallback func(trekState *trekStateType, position cursorPosition)
 type numElementsComputerCallback func(trekState *trekStateType) int
 type uiHandlerType func(g *gocui.Gui, v *gocui.View) error
@@ -121,159 +131,167 @@ func quit(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 	return gocui.ErrQuit
 }
 
-func selectCluster(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
+func createView(g *gocui.Gui, trekState *trekStateType, view trekView) error {
 	maxX, maxY := g.Size()
-	newViewTitle := "Jobs"
-	bounds := getBounds(maxX, maxY, 1, 5, 0)
-	if v, err := g.SetView(newViewTitle, bounds.startX, bounds.startY, bounds.endX, bounds.endY); err != nil {
+	bounds := getBounds(maxX, maxY, view.panelNum, view.panelsTotal, view.margin)
+	if v, err := g.SetView(view.name, bounds.startX, bounds.startY, bounds.endX, bounds.endY); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = newViewTitle
-		v.Highlight = true
-		v.SelBgColor = gocui.ColorGreen
-		v.SelFgColor = gocui.ColorBlack
+		v.Title = view.name
+		view.handler(v, trekState)
+	}
 
-		options := &nomad.QueryOptions{}
-		jobListStubs, _, _ := trekState.client.Jobs().List(options)
-		trekState.jobs = make([]nomad.Job, 0)
-		for _, job := range jobListStubs {
-			fullJob, _, _ := trekState.client.Jobs().Info(job.ID, options)
-			trekState.jobs = append(trekState.jobs, *fullJob)
-			fmt.Fprintf(v, "%s (%s)\n", *(fullJob.Name), *(fullJob.ID))
+	if view.foregroundAfterCreation {
+		if _, err := g.SetCurrentView(view.name); err != nil {
+			log.Panicln(err)
+			return err
 		}
-		v.Editable = false
-		v.Wrap = false
 	}
-	if _, err := g.SetCurrentView(newViewTitle); err != nil {
-		return err
-	}
+
 	return nil
 }
 
-func selectJob(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
-	maxX, maxY := g.Size()
+func selectCluster(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
+	return createView(g, trekState,
+		trekView{
+			name: "Jobs",
+			foregroundAfterCreation: true,
+			panelNum:                1,
+			panelsTotal:             5,
+			margin:                  0,
+			handler: func(view *gocui.View, trekState *trekStateType) error {
+				view.Highlight = true
+				view.SelBgColor = gocui.ColorGreen
+				view.SelFgColor = gocui.ColorBlack
+				view.Editable = false
+				view.Wrap = false
 
+				options := &nomad.QueryOptions{}
+				jobListStubs, _, _ := trekState.client.Jobs().List(options)
+				trekState.jobs = make([]nomad.Job, 0)
+				for _, job := range jobListStubs {
+					fullJob, _, _ := trekState.client.Jobs().Info(job.ID, options)
+					trekState.jobs = append(trekState.jobs, *fullJob)
+					fmt.Fprintf(view, "%s (%s)\n", *(fullJob.Name), *(fullJob.ID))
+				}
+
+				return nil
+			}})
+}
+
+func selectJob(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 	if len(trekState.jobs) < 1 {
 		return nil
 	}
 
-	job := trekState.jobs[trekState.selectedJob]
+	return createView(g, trekState,
+		trekView{
+			name: "Task Groups",
+			foregroundAfterCreation: true,
+			panelNum:                2,
+			panelsTotal:             5,
+			margin:                  0,
+			handler: func(view *gocui.View, trekState *trekStateType) error {
+				view.Highlight = true
+				view.SelBgColor = gocui.ColorGreen
+				view.SelFgColor = gocui.ColorBlack
+				view.Editable = false
+				view.Wrap = false
 
-	newViewTitle := "Task Groups"
-	bounds := getBounds(maxX, maxY, 2, 5, 0)
-	if v, err := g.SetView(newViewTitle, bounds.startX, bounds.startY, bounds.endX, bounds.endY); err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
-		}
-		v.Title = newViewTitle
-		v.Highlight = true
-		v.SelBgColor = gocui.ColorGreen
-		v.SelFgColor = gocui.ColorBlack
+				job := trekState.jobs[trekState.selectedJob]
 
-		for _, taskGroup := range job.TaskGroups {
-			fmt.Fprintf(v, "%s (%d)\n", *(taskGroup.Name), *(taskGroup.Count))
-		}
-		v.Editable = false
-		v.Wrap = false
-	}
-	if _, err := g.SetCurrentView(newViewTitle); err != nil {
-		return err
-	}
-	return nil
+				for _, taskGroup := range job.TaskGroups {
+					fmt.Fprintf(view, "%s (%d)\n", *(taskGroup.Name), *(taskGroup.Count))
+				}
+
+				return nil
+			}})
 }
+
 func selectTaskGroup(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
-	maxX, maxY := g.Size()
-	newViewTitle := "Tasks"
-	bounds := getBounds(maxX, maxY, 3, 5, 0)
-	if v, err := g.SetView(newViewTitle, bounds.startX, bounds.startY, bounds.endX, bounds.endY); err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
-		}
-		v.Title = newViewTitle
-		v.Highlight = true
-		v.SelBgColor = gocui.ColorGreen
-		v.SelFgColor = gocui.ColorBlack
+	return createView(g, trekState,
+		trekView{
+			name: "Tasks",
+			foregroundAfterCreation: true,
+			panelNum:                3,
+			panelsTotal:             5,
+			margin:                  0,
+			handler: func(view *gocui.View, trekState *trekStateType) error {
+				view.Highlight = true
+				view.SelBgColor = gocui.ColorGreen
+				view.SelFgColor = gocui.ColorBlack
+				view.Editable = false
+				view.Wrap = false
 
-		taskGroup := trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedTaskGroup]
+				taskGroup := trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedTaskGroup]
 
-		for _, task := range taskGroup.Tasks {
-			fmt.Fprintf(v, "%s (%s)\n", (task.Name), (task.Driver))
-		}
+				for _, task := range taskGroup.Tasks {
+					fmt.Fprintf(view, "%s (%s)\n", (task.Name), (task.Driver))
+				}
 
-		v.Editable = false
-		v.Wrap = false
-	}
-	if _, err := g.SetCurrentView(newViewTitle); err != nil {
-		return err
-	}
-	return nil
+				return nil
+			}})
 }
 
 func selectTask(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
-	maxX, maxY := g.Size()
-	newViewTitle := "Services"
-	bounds := getBounds(maxX, maxY, 4, 5, 0)
-	if v, err := g.SetView(newViewTitle, bounds.startX, bounds.startY, bounds.endX, bounds.endY); err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
-		}
-		v.Title = newViewTitle
-		v.Highlight = true
-		v.SelBgColor = gocui.ColorGreen
-		v.SelFgColor = gocui.ColorBlack
+	return createView(g, trekState,
+		trekView{
+			name: "Services",
+			foregroundAfterCreation: true,
+			panelNum:                4,
+			panelsTotal:             5,
+			margin:                  0,
+			handler: func(view *gocui.View, trekState *trekStateType) error {
+				view.Highlight = true
+				view.SelBgColor = gocui.ColorGreen
+				view.SelFgColor = gocui.ColorBlack
+				view.Editable = false
+				view.Wrap = false
 
-		task := trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedTaskGroup].Tasks[trekState.selectedTask]
+				task := trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedTaskGroup].Tasks[trekState.selectedTask]
 
-		for _, service := range task.Services {
-			fmt.Fprintf(v, "%s\n", (service.Name))
-		}
+				for _, service := range task.Services {
+					fmt.Fprintf(view, "%s\n", (service.Name))
+				}
 
-		v.Editable = false
-		v.Wrap = false
-	}
-	if _, err := g.SetCurrentView(newViewTitle); err != nil {
-		return err
-	}
-	return nil
+				return nil
+			}})
 }
 
 func selectService(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
-	maxX, maxY := g.Size()
-	newViewTitle := "Service"
-	bounds := getBounds(maxX, maxY, 0, 1, 10)
-	if v, err := g.SetView(newViewTitle, bounds.startX, bounds.startY, bounds.endX, bounds.endY); err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
-		}
-		v.Title = newViewTitle
-		v.Highlight = true
-		v.SelBgColor = gocui.ColorGreen
-		v.SelFgColor = gocui.ColorBlack
+	return createView(g, trekState,
+		trekView{
+			name: "Service",
+			foregroundAfterCreation: true,
+			panelNum:                0,
+			panelsTotal:             1,
+			margin:                  10,
+			handler: func(view *gocui.View, trekState *trekStateType) error {
+				view.Highlight = true
+				view.SelBgColor = gocui.ColorGreen
+				view.SelFgColor = gocui.ColorBlack
+				view.Editable = false
+				view.Wrap = false
 
-		service := trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedTaskGroup].Tasks[trekState.selectedTask].Services[trekState.selectedService]
+				service := trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedTaskGroup].Tasks[trekState.selectedTask].Services[trekState.selectedService]
 
-		val := reflect.Indirect(reflect.ValueOf(service))
-		valType := val.Type()
+				val := reflect.Indirect(reflect.ValueOf(service))
+				valType := val.Type()
 
-		for i := 0; i < val.NumField(); i++ {
-			field := valType.Field(i)
-			value := val.FieldByName(field.Name).Interface()
-			name := field.Name
+				for i := 0; i < val.NumField(); i++ {
+					field := valType.Field(i)
+					value := val.FieldByName(field.Name).Interface()
+					name := field.Name
 
-			fmt.Fprintf(v, "%s: %+v\n", name, value)
-		}
+					fmt.Fprintf(view, "%s: %+v\n", name, value)
+				}
 
-		v.Editable = false
-		v.Wrap = false
-	}
-	if _, err := g.SetCurrentView(newViewTitle); err != nil {
-		return err
-	}
-	return nil
+				return nil
+			}})
 }
 
-func clearView(currentView string, newCurrentView string, handler clearViewCallback) uiHandlerWithStateType {
+func deleteView(currentView string, newCurrentView string, handler deleteViewCallback) uiHandlerWithStateType {
 	return func(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 		if err := g.DeleteView(currentView); err != nil {
 			return err
@@ -305,7 +323,7 @@ var bindings = []binding{
 		})},
 
 	binding{panelName: "Jobs", key: gocui.KeyArrowLeft,
-		handler: clearView("Jobs", "Clusters", func(trekState *trekStateType) { trekState.selectedJob = 0 })},
+		handler: deleteView("Jobs", "Clusters", func(trekState *trekStateType) { trekState.selectedJob = 0 })},
 	binding{panelName: "Jobs", key: gocui.KeyEnter, handler: selectJob},
 	binding{panelName: "Jobs", key: gocui.KeyArrowRight, handler: selectJob},
 	binding{panelName: "Jobs", key: gocui.KeyArrowUp,
@@ -317,7 +335,7 @@ var bindings = []binding{
 		func(trekState *trekStateType) int { return len(trekState.jobs) })},
 
 	binding{panelName: "Task Groups", key: gocui.KeyArrowLeft,
-		handler: clearView("Task Groups", "Jobs", func(trekState *trekStateType) { trekState.selectedTaskGroup = 0 })},
+		handler: deleteView("Task Groups", "Jobs", func(trekState *trekStateType) { trekState.selectedTaskGroup = 0 })},
 	binding{panelName: "Task Groups", key: gocui.KeyEnter, handler: selectTaskGroup},
 	binding{panelName: "Task Groups", key: gocui.KeyArrowRight, handler: selectTaskGroup},
 	binding{panelName: "Task Groups", key: gocui.KeyArrowDown, handler: cursorDown(
@@ -329,7 +347,7 @@ var bindings = []binding{
 		})},
 
 	binding{panelName: "Tasks", key: gocui.KeyArrowLeft,
-		handler: clearView("Tasks", "Task Groups", func(trekState *trekStateType) { trekState.selectedTask = 0 })},
+		handler: deleteView("Tasks", "Task Groups", func(trekState *trekStateType) { trekState.selectedTask = 0 })},
 	binding{panelName: "Tasks", key: gocui.KeyEnter, handler: selectTask},
 	binding{panelName: "Tasks", key: gocui.KeyArrowRight, handler: selectTask},
 	binding{panelName: "Tasks", key: gocui.KeyArrowDown,
@@ -344,7 +362,7 @@ var bindings = []binding{
 		})},
 
 	binding{panelName: "Services", key: gocui.KeyArrowLeft,
-		handler: clearView("Services", "Tasks", func(trekState *trekStateType) { trekState.selectedService = 0 })},
+		handler: deleteView("Services", "Tasks", func(trekState *trekStateType) { trekState.selectedService = 0 })},
 	binding{panelName: "Services", key: gocui.KeyEnter, handler: selectService},
 	binding{panelName: "Services", key: gocui.KeyArrowRight, handler: selectService},
 	binding{panelName: "Services", key: gocui.KeyArrowDown,
@@ -359,11 +377,11 @@ var bindings = []binding{
 		})},
 
 	binding{panelName: "Service", key: gocui.KeyEnter,
-		handler: clearView("Service", "Services", func(trekState *trekStateType) {})},
+		handler: deleteView("Service", "Services", func(trekState *trekStateType) {})},
 
 	binding{panelName: "", key: gocui.KeyCtrlC, handler: quit},
 	binding{panelName: "msg", key: gocui.KeyEnter,
-		handler: clearView("msg", "Tasks", func(trekState *trekStateType) {})},
+		handler: deleteView("msg", "Tasks", func(trekState *trekStateType) {})},
 }
 
 func keybindings(g *gocui.Gui, trekState *trekStateType) error {
@@ -407,12 +425,23 @@ func getBounds(maxX int, maxY int, currentPanel int, totalPanels int, margin int
 		endY:   endY - margin}
 }
 
+var inited bool = false
+
 func layout(trekState *trekStateType) layoutType {
 	return func(g *gocui.Gui) error {
-		maxX, maxY := g.Size()
+		if inited {
+			return nil
+		}
 		title := "Welcome to Trek!"
+
+		// Show headers
+		maxX, _ := g.Size()
 		padding := (maxX-1)/2 - (len(title) / 2)
-		if v, err := g.SetView("title_padding", padding, 0, padding+len(title)+1, 2); err != nil {
+		startX := padding
+		startY := 0
+		endX := padding + len(title)
+		endY := 2
+		if v, err := g.SetView("title_padding", startX, startY, endX, endY); err != nil {
 			if err != gocui.ErrUnknownView {
 				return err
 			}
@@ -423,36 +452,36 @@ func layout(trekState *trekStateType) layoutType {
 			fmt.Fprintf(v, "%*s", 5, title)
 		}
 
-		bounds := getBounds(maxX, maxY, 0, 5, 0)
-		newViewTitle := "Clusters"
-		if v, err := g.SetView(newViewTitle, bounds.startX, bounds.startY, bounds.endX, bounds.endY); err != nil {
-			if err != gocui.ErrUnknownView {
-				return err
-			}
-			v.Highlight = true
-			v.SelBgColor = gocui.ColorGreen
-			v.SelFgColor = gocui.ColorBlack
-			v.Title = "Clusters"
-			file, err := os.Open(".trek.rc")
-			if err != nil {
-				log.Panicln(err)
-			}
-			decoder := json.NewDecoder(file)
-			trekState.nomadConnectConfiguration = configuration{}
-			err = decoder.Decode(&trekState.nomadConnectConfiguration)
-			if err != nil {
-				log.Panicln(err)
-			}
+		inited = true
+		return createView(g, trekState,
+			trekView{
+				name: "Clusters",
+				foregroundAfterCreation: true,
+				panelNum:                0,
+				panelsTotal:             5,
+				margin:                  0,
+				handler: func(view *gocui.View, trekState *trekStateType) error {
 
-			for _, env := range trekState.nomadConnectConfiguration.Environments {
-				fmt.Fprintf(v, "%s\n", env.Name)
-			}
+					view.Highlight = true
+					view.SelBgColor = gocui.ColorGreen
+					view.SelFgColor = gocui.ColorBlack
+					file, err := os.Open(".trek.rc")
+					if err != nil {
+						log.Panicln(err)
+					}
+					decoder := json.NewDecoder(file)
+					trekState.nomadConnectConfiguration = configuration{}
+					err = decoder.Decode(&trekState.nomadConnectConfiguration)
+					if err != nil {
+						log.Panicln(err)
+					}
 
-			if _, err := g.SetCurrentView("Clusters"); err != nil {
-				return err
-			}
-		}
-		return nil
+					for _, env := range trekState.nomadConnectConfiguration.Environments {
+						fmt.Fprintf(view, "%s\n", env.Name)
+					}
+
+					return nil
+				}})
 	}
 }
 

@@ -20,32 +20,47 @@ type environment struct {
 	Name    string
 	Address string
 }
-type clearViewCallback func()
+type clearViewCallback func(uiState *uiStateType)
 type uiHandlerType func(g *gocui.Gui, v *gocui.View) error
+type uiHandlerWithStateType func(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error
 
-var selectedCluster int = 0
-var selectedJob int = 0
-var selectedTaskGroup int = 0
-var selectedTask int = 0
-var selectedService int = 0
-var config *api.Config
-var client *api.Client
-var jobs []api.Job
-var jobsHandle *api.Jobs
+type uiStateType struct {
+	selectedCluster   int
+	selectedJob       int
+	selectedTaskGroup int
+	selectedTask      int
+	selectedService   int
+	showUI            bool
+}
+
+type trekStateType struct {
+	config                    *api.Config
+	client                    *api.Client
+	jobs                      []api.Job
+	jobsHandle                *api.Jobs
+	nomadConnectConfiguration configuration
+}
+
+var trekState trekStateType
 var options *api.QueryOptions
-var nomadConnectConfiguration configuration
-var showUI bool
 
 // used in CLI mode
 var jobID string
 
-func clustersViewCursorDown(g *gocui.Gui, v *gocui.View) error {
+func stateify(handler uiHandlerWithStateType, uiState *uiStateType) uiHandlerType {
+	return func(g *gocui.Gui, v *gocui.View) error {
+		return handler(g, v, uiState)
+	}
+}
+
+// func clearView(currentView string, newCurrentView string, handler clearViewCallback) uiHandlerType {
+func clustersViewCursorDown(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	if v != nil {
 		cx, cy := v.Cursor()
 
 		// Prevent scrolling past clusters
 		if v.Title == "Clusters" {
-			numClusters := len(nomadConnectConfiguration.Environments)
+			numClusters := len(trekState.nomadConnectConfiguration.Environments)
 			if cy < 0 || cy >= numClusters-1 {
 				return nil
 			}
@@ -61,7 +76,7 @@ func clustersViewCursorDown(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func clustersViewCursorUp(g *gocui.Gui, v *gocui.View) error {
+func clustersViewCursorUp(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	if v != nil {
 		ox, oy := v.Origin()
 		cx, cy := v.Cursor()
@@ -74,7 +89,7 @@ func clustersViewCursorUp(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func jobsViewCursorUp(g *gocui.Gui, v *gocui.View) error {
+func jobsViewCursorUp(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	if v != nil {
 		ox, oy := v.Origin()
 		cx, cy := v.Cursor()
@@ -83,17 +98,17 @@ func jobsViewCursorUp(g *gocui.Gui, v *gocui.View) error {
 				return err
 			}
 		}
-		selectedJob = cy - 1
+		uiState.selectedJob = cy - 1
 	}
 	return nil
 }
-func jobsViewCursorDown(g *gocui.Gui, v *gocui.View) error {
+func jobsViewCursorDown(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	if v != nil {
 		cx, cy := v.Cursor()
 
 		// Prevent scrolling past jobs
 		if v.Title == "Jobs" {
-			numJobs := len(jobs)
+			numJobs := len(trekState.jobs)
 			if cy < 0 || cy >= numJobs-1 {
 				return nil
 			}
@@ -105,12 +120,12 @@ func jobsViewCursorDown(g *gocui.Gui, v *gocui.View) error {
 				return err
 			}
 		}
-		selectedJob = cy + 1
+		uiState.selectedJob = cy + 1
 	}
 	return nil
 }
 
-func taskGroupsViewCursorUp(g *gocui.Gui, v *gocui.View) error {
+func taskGroupsViewCursorUp(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	if v != nil {
 		ox, oy := v.Origin()
 		cx, cy := v.Cursor()
@@ -119,17 +134,17 @@ func taskGroupsViewCursorUp(g *gocui.Gui, v *gocui.View) error {
 				return err
 			}
 		}
-		selectedTaskGroup = cy - 1
+		uiState.selectedTaskGroup = cy - 1
 	}
 	return nil
 }
-func taskGroupsViewCursorDown(g *gocui.Gui, v *gocui.View) error {
+func taskGroupsViewCursorDown(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	if v != nil {
 		cx, cy := v.Cursor()
 
 		// Prevent scrolling past jobs
 		if v.Title == "Task Groups" {
-			numGroups := len(jobs[selectedJob].TaskGroups)
+			numGroups := len(trekState.jobs[uiState.selectedJob].TaskGroups)
 			if cy < 0 || cy >= numGroups-1 {
 				return nil
 			}
@@ -141,12 +156,12 @@ func taskGroupsViewCursorDown(g *gocui.Gui, v *gocui.View) error {
 				return err
 			}
 		}
-		selectedTaskGroup = cy + 1
+		uiState.selectedTaskGroup = cy + 1
 	}
 	return nil
 }
 
-func tasksViewCursorUp(g *gocui.Gui, v *gocui.View) error {
+func tasksViewCursorUp(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	if v != nil {
 		ox, oy := v.Origin()
 		cx, cy := v.Cursor()
@@ -155,17 +170,17 @@ func tasksViewCursorUp(g *gocui.Gui, v *gocui.View) error {
 				return err
 			}
 		}
-		selectedTask = cy - 1
+		uiState.selectedTask = cy - 1
 	}
 	return nil
 }
-func tasksViewCursorDown(g *gocui.Gui, v *gocui.View) error {
+func tasksViewCursorDown(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	if v != nil {
 		cx, cy := v.Cursor()
 
 		// Prevent scrolling past tasks
 		if v.Title == "Tasks" {
-			numTasks := len(jobs[selectedJob].TaskGroups[selectedTaskGroup].Tasks)
+			numTasks := len(trekState.jobs[uiState.selectedJob].TaskGroups[uiState.selectedTaskGroup].Tasks)
 			if cy < 0 || cy >= numTasks-1 {
 				return nil
 			}
@@ -177,12 +192,12 @@ func tasksViewCursorDown(g *gocui.Gui, v *gocui.View) error {
 				return err
 			}
 		}
-		selectedTask = cy + 1
+		uiState.selectedTask = cy + 1
 	}
 	return nil
 }
 
-func selectServiceViewCursorUp(g *gocui.Gui, v *gocui.View) error {
+func selectServiceViewCursorUp(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	if v != nil {
 		ox, oy := v.Origin()
 		cx, cy := v.Cursor()
@@ -191,17 +206,17 @@ func selectServiceViewCursorUp(g *gocui.Gui, v *gocui.View) error {
 				return err
 			}
 		}
-		selectedService = cy - 1
+		uiState.selectedService = cy - 1
 	}
 	return nil
 }
-func selectServiceViewCursorDown(g *gocui.Gui, v *gocui.View) error {
+func selectServiceViewCursorDown(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	if v != nil {
 		cx, cy := v.Cursor()
 
 		// Prevent scrolling past services
 		if v.Title == "Services" {
-			numServices := len(jobs[selectedJob].TaskGroups[selectedTaskGroup].Tasks[selectedTask].Services)
+			numServices := len(trekState.jobs[uiState.selectedJob].TaskGroups[uiState.selectedTaskGroup].Tasks[uiState.selectedTask].Services)
 			if cy < 0 || cy >= numServices-1 {
 				return nil
 			}
@@ -213,12 +228,12 @@ func selectServiceViewCursorDown(g *gocui.Gui, v *gocui.View) error {
 				return err
 			}
 		}
-		selectedService = cy + 1
+		uiState.selectedService = cy + 1
 	}
 	return nil
 }
 
-func confirmTaskSelection(g *gocui.Gui, v *gocui.View) error {
+func confirmTaskSelection(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	var l string
 	var err error
 
@@ -240,11 +255,11 @@ func confirmTaskSelection(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func quit(g *gocui.Gui, v *gocui.View) error {
+func quit(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	return gocui.ErrQuit
 }
 
-func selectCluster(g *gocui.Gui, v *gocui.View) error {
+func selectCluster(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	_, maxY := g.Size()
 	if v, err := g.SetView("Jobs", 30, 2, 60, maxY-1); err != nil {
 		if err != gocui.ErrUnknownView {
@@ -254,12 +269,12 @@ func selectCluster(g *gocui.Gui, v *gocui.View) error {
 		v.Highlight = true
 		v.SelBgColor = gocui.ColorGreen
 		v.SelFgColor = gocui.ColorBlack
-		jobsHandle = client.Jobs()
-		jobListStubs, _, _ := jobsHandle.List(options)
-		jobs = make([]api.Job, 0)
+		trekState.jobsHandle = trekState.client.Jobs()
+		jobListStubs, _, _ := trekState.jobsHandle.List(options)
+		trekState.jobs = make([]api.Job, 0)
 		for _, job := range jobListStubs {
-			fullJob, _, _ := jobsHandle.Info(job.ID, options)
-			jobs = append(jobs, *fullJob)
+			fullJob, _, _ := trekState.jobsHandle.Info(job.ID, options)
+			trekState.jobs = append(trekState.jobs, *fullJob)
 			fmt.Fprintf(v, "%s (%s)\n", *(fullJob.Name), *(fullJob.ID))
 		}
 		v.Editable = false
@@ -271,14 +286,14 @@ func selectCluster(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func selectJob(g *gocui.Gui, v *gocui.View) error {
+func selectJob(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	_, maxY := g.Size()
 
-	if len(jobs) < 1 {
+	if len(trekState.jobs) < 1 {
 		return nil
 	}
 
-	job := jobs[selectedJob]
+	job := trekState.jobs[uiState.selectedJob]
 
 	if v, err := g.SetView("Task Groups", 60, 2, 90, maxY-1); err != nil {
 		if err != gocui.ErrUnknownView {
@@ -300,7 +315,7 @@ func selectJob(g *gocui.Gui, v *gocui.View) error {
 	}
 	return nil
 }
-func selectTaskGroup(g *gocui.Gui, v *gocui.View) error {
+func selectTaskGroup(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	_, maxY := g.Size()
 	if v, err := g.SetView("Tasks", 90, 2, 120, maxY-1); err != nil {
 		if err != gocui.ErrUnknownView {
@@ -311,7 +326,7 @@ func selectTaskGroup(g *gocui.Gui, v *gocui.View) error {
 		v.SelBgColor = gocui.ColorGreen
 		v.SelFgColor = gocui.ColorBlack
 
-		taskGroup := jobs[selectedJob].TaskGroups[selectedTaskGroup]
+		taskGroup := trekState.jobs[uiState.selectedJob].TaskGroups[uiState.selectedTaskGroup]
 
 		for _, task := range taskGroup.Tasks {
 			fmt.Fprintf(v, "%s (%s)\n", (task.Name), (task.Driver))
@@ -326,7 +341,7 @@ func selectTaskGroup(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func selectTask(g *gocui.Gui, v *gocui.View) error {
+func selectTask(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	// confirmTaskSelection(g, v)
 	_, maxY := g.Size()
 	if v, err := g.SetView("Services", 120, 2, 150, maxY-1); err != nil {
@@ -338,7 +353,7 @@ func selectTask(g *gocui.Gui, v *gocui.View) error {
 		v.SelBgColor = gocui.ColorGreen
 		v.SelFgColor = gocui.ColorBlack
 
-		task := jobs[selectedJob].TaskGroups[selectedTaskGroup].Tasks[selectedTask]
+		task := trekState.jobs[uiState.selectedJob].TaskGroups[uiState.selectedTaskGroup].Tasks[uiState.selectedTask]
 
 		for _, service := range task.Services {
 			fmt.Fprintf(v, "%s\n", (service.Name))
@@ -353,7 +368,7 @@ func selectTask(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func selectService(g *gocui.Gui, v *gocui.View) error {
+func selectService(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	maxX, maxY := g.Size()
 	if v, err := g.SetView("Service", 20, 20, maxX-20, maxY-20); err != nil {
 		if err != gocui.ErrUnknownView {
@@ -364,7 +379,7 @@ func selectService(g *gocui.Gui, v *gocui.View) error {
 		v.SelBgColor = gocui.ColorGreen
 		v.SelFgColor = gocui.ColorBlack
 
-		service := jobs[selectedJob].TaskGroups[selectedTaskGroup].Tasks[selectedTask].Services[selectedService]
+		service := trekState.jobs[uiState.selectedJob].TaskGroups[uiState.selectedTaskGroup].Tasks[uiState.selectedTask].Services[uiState.selectedService]
 
 		val := reflect.Indirect(reflect.ValueOf(service))
 		valType := val.Type()
@@ -386,15 +401,15 @@ func selectService(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func clearView(currentView string, newCurrentView string, handler clearViewCallback) uiHandlerType {
-	return func(g *gocui.Gui, v *gocui.View) error {
+func clearView(currentView string, newCurrentView string, handler clearViewCallback) uiHandlerWithStateType {
+	return func(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 		if err := g.DeleteView(currentView); err != nil {
 			return err
 		}
 		if _, err := g.SetCurrentView(newCurrentView); err != nil {
 			return err
 		}
-		handler()
+		handler(uiState)
 		return nil
 	}
 }
@@ -403,7 +418,7 @@ func clearView(currentView string, newCurrentView string, handler clearViewCallb
 type binding struct {
 	panelName string
 	key       gocui.Key
-	handler   func(*gocui.Gui, *gocui.View) error
+	handler   uiHandlerWithStateType
 }
 
 var bindings = []binding{
@@ -413,44 +428,44 @@ var bindings = []binding{
 	binding{panelName: "Clusters", key: gocui.KeyArrowUp, handler: clustersViewCursorUp},
 
 	binding{panelName: "Jobs", key: gocui.KeyArrowLeft,
-		handler: clearView("Jobs", "Clusters", func() { selectedJob = 0 })},
+		handler: clearView("Jobs", "Clusters", func(uiState *uiStateType) { uiState.selectedJob = 0 })},
 	binding{panelName: "Jobs", key: gocui.KeyEnter, handler: selectJob},
 	binding{panelName: "Jobs", key: gocui.KeyArrowRight, handler: selectJob},
 	binding{panelName: "Jobs", key: gocui.KeyArrowDown, handler: jobsViewCursorDown},
 	binding{panelName: "Jobs", key: gocui.KeyArrowUp, handler: jobsViewCursorUp},
 
 	binding{panelName: "Task Groups", key: gocui.KeyArrowLeft,
-		handler: clearView("Task Groups", "Jobs", func() { selectedTaskGroup = 0 })},
+		handler: clearView("Task Groups", "Jobs", func(uiState *uiStateType) { uiState.selectedTaskGroup = 0 })},
 	binding{panelName: "Task Groups", key: gocui.KeyEnter, handler: selectTaskGroup},
 	binding{panelName: "Task Groups", key: gocui.KeyArrowRight, handler: selectTaskGroup},
 	binding{panelName: "Task Groups", key: gocui.KeyArrowDown, handler: taskGroupsViewCursorDown},
 	binding{panelName: "Task Groups", key: gocui.KeyArrowUp, handler: taskGroupsViewCursorUp},
 
 	binding{panelName: "Tasks", key: gocui.KeyArrowLeft,
-		handler: clearView("Tasks", "Task Groups", func() { selectedTask = 0 })},
+		handler: clearView("Tasks", "Task Groups", func(uiState *uiStateType) { uiState.selectedTask = 0 })},
 	binding{panelName: "Tasks", key: gocui.KeyEnter, handler: selectTask},
 	binding{panelName: "Tasks", key: gocui.KeyArrowRight, handler: selectTask},
 	binding{panelName: "Tasks", key: gocui.KeyArrowDown, handler: tasksViewCursorDown},
 	binding{panelName: "Tasks", key: gocui.KeyArrowUp, handler: tasksViewCursorUp},
 
 	binding{panelName: "Services", key: gocui.KeyArrowLeft,
-		handler: clearView("Services", "Tasks", func() { selectedService = 0 })},
+		handler: clearView("Services", "Tasks", func(uiState *uiStateType) { uiState.selectedService = 0 })},
 	binding{panelName: "Services", key: gocui.KeyEnter, handler: selectService},
 	binding{panelName: "Services", key: gocui.KeyArrowRight, handler: selectService},
 	binding{panelName: "Services", key: gocui.KeyArrowDown, handler: selectServiceViewCursorDown},
 	binding{panelName: "Services", key: gocui.KeyArrowUp, handler: selectServiceViewCursorUp},
 
 	binding{panelName: "Service", key: gocui.KeyEnter,
-		handler: clearView("Service", "Services", func() {})},
+		handler: clearView("Service", "Services", func(uiState *uiStateType) {})},
 
 	binding{panelName: "", key: gocui.KeyCtrlC, handler: quit},
 	binding{panelName: "msg", key: gocui.KeyEnter,
-		handler: clearView("msg", "Tasks", func() {})},
+		handler: clearView("msg", "Tasks", func(uiState *uiStateType) {})},
 }
 
-func keybindings(g *gocui.Gui) error {
+func keybindings(g *gocui.Gui, uiState *uiStateType) error {
 	for _, binding := range bindings {
-		if err := g.SetKeybinding(binding.panelName, binding.key, gocui.ModNone, binding.handler); err != nil {
+		if err := g.SetKeybinding(binding.panelName, binding.key, gocui.ModNone, stateify(binding.handler, uiState)); err != nil {
 			return err
 		}
 	}
@@ -485,13 +500,13 @@ func layout(g *gocui.Gui) error {
 			log.Panicln(err)
 		}
 		decoder := json.NewDecoder(file)
-		nomadConnectConfiguration = configuration{}
-		err = decoder.Decode(&nomadConnectConfiguration)
+		trekState.nomadConnectConfiguration = configuration{}
+		err = decoder.Decode(&trekState.nomadConnectConfiguration)
 		if err != nil {
 			log.Panicln(err)
 		}
 
-		for _, env := range nomadConnectConfiguration.Environments {
+		for _, env := range trekState.nomadConnectConfiguration.Environments {
 			fmt.Fprintf(v, "%s\n", env.Name)
 		}
 
@@ -515,8 +530,8 @@ func checkValidFlag(flagName string, flagValue string, validValues map[string]bo
 		os.Exit(1)
 	}
 }
-func parseFlags() {
-	flag.BoolVar(&showUI, "ui", true, "whether to show the ncurses UI or not")
+func parseFlags(uiState *uiStateType) {
+	flag.BoolVar(&uiState.showUI, "ui", true, "whether to show the ncurses UI or not")
 	flag.StringVar(&jobID, "jobID", "", "jobID to get")
 
 	flag.Parse()
@@ -529,18 +544,19 @@ func usage() {
 
 func main() {
 	//connect to nomad
-	config = api.DefaultConfig()
+	uiState := new(uiStateType)
+	trekState.config = api.DefaultConfig()
 	var err error
-	client, err = api.NewClient(config)
+	trekState.client, err = api.NewClient(trekState.config)
 	options = &api.QueryOptions{}
 
-	parseFlags()
+	parseFlags(uiState)
 
 	if err != nil {
 		log.Panicln(err)
 	}
 
-	if showUI {
+	if uiState.showUI {
 		// build ui
 		g, err := gocui.NewGui(gocui.OutputNormal)
 		if err != nil {
@@ -552,7 +568,7 @@ func main() {
 
 		g.SetManagerFunc(layout)
 
-		if err := keybindings(g); err != nil {
+		if err := keybindings(g, uiState); err != nil {
 			log.Panicln(err)
 		}
 
@@ -561,7 +577,7 @@ func main() {
 		}
 	} else {
 		fmt.Printf("Trying to get jobID \"%s\" (specified by -jobID)\n", jobID)
-		allocs := client.Allocations()
+		allocs := trekState.client.Allocations()
 		allocsListStub, _, _ := allocs.List(options)
 		found := false
 		var foundAllocation *api.Allocation
@@ -578,7 +594,7 @@ func main() {
 		if found == false {
 			log.Panicf("Couldn't find the node onto which the job ID %s is running... Aborting\n", jobID)
 		} else {
-			nodes := client.Nodes()
+			nodes := trekState.client.Nodes()
 			node, _, err := nodes.Info(foundAllocation.NodeID, options)
 			if err != nil {
 				log.Panicln(err)

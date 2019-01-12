@@ -20,7 +20,12 @@ type environment struct {
 	Name    string
 	Address string
 }
+type cursorPosition struct {
+	x int
+	y int
+}
 type clearViewCallback func(uiState *uiStateType)
+type cursorCallback func(uiState *uiStateType, position cursorPosition)
 type uiHandlerType func(g *gocui.Gui, v *gocui.View) error
 type uiHandlerWithStateType func(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error
 
@@ -76,32 +81,22 @@ func clustersViewCursorDown(g *gocui.Gui, v *gocui.View, uiState *uiStateType) e
 	return nil
 }
 
-func clustersViewCursorUp(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
-	if v != nil {
-		ox, oy := v.Origin()
-		cx, cy := v.Cursor()
-		if err := v.SetCursor(cx, cy-1); err != nil && oy > 0 {
-			if err := v.SetOrigin(ox, oy-1); err != nil {
-				return err
+func cursorUp(handler cursorCallback) uiHandlerWithStateType {
+	return func(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
+		if v != nil {
+			ox, oy := v.Origin()
+			cx, cy := v.Cursor()
+			if err := v.SetCursor(cx, cy-1); err != nil && oy > 0 {
+				if err := v.SetOrigin(ox, oy-1); err != nil {
+					return err
+				}
 			}
+			handler(uiState, cursorPosition{x: cx, y: cy - 1})
 		}
+		return nil
 	}
-	return nil
 }
 
-func jobsViewCursorUp(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
-	if v != nil {
-		ox, oy := v.Origin()
-		cx, cy := v.Cursor()
-		if err := v.SetCursor(cx, cy-1); err != nil && oy > 0 {
-			if err := v.SetOrigin(ox, oy-1); err != nil {
-				return err
-			}
-		}
-		uiState.selectedJob = cy - 1
-	}
-	return nil
-}
 func jobsViewCursorDown(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	if v != nil {
 		cx, cy := v.Cursor()
@@ -125,19 +120,6 @@ func jobsViewCursorDown(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error
 	return nil
 }
 
-func taskGroupsViewCursorUp(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
-	if v != nil {
-		ox, oy := v.Origin()
-		cx, cy := v.Cursor()
-		if err := v.SetCursor(cx, cy-1); err != nil && oy > 0 {
-			if err := v.SetOrigin(ox, oy-1); err != nil {
-				return err
-			}
-		}
-		uiState.selectedTaskGroup = cy - 1
-	}
-	return nil
-}
 func taskGroupsViewCursorDown(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	if v != nil {
 		cx, cy := v.Cursor()
@@ -161,19 +143,6 @@ func taskGroupsViewCursorDown(g *gocui.Gui, v *gocui.View, uiState *uiStateType)
 	return nil
 }
 
-func tasksViewCursorUp(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
-	if v != nil {
-		ox, oy := v.Origin()
-		cx, cy := v.Cursor()
-		if err := v.SetCursor(cx, cy-1); err != nil && oy > 0 {
-			if err := v.SetOrigin(ox, oy-1); err != nil {
-				return err
-			}
-		}
-		uiState.selectedTask = cy - 1
-	}
-	return nil
-}
 func tasksViewCursorDown(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	if v != nil {
 		cx, cy := v.Cursor()
@@ -197,19 +166,6 @@ func tasksViewCursorDown(g *gocui.Gui, v *gocui.View, uiState *uiStateType) erro
 	return nil
 }
 
-func selectServiceViewCursorUp(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
-	if v != nil {
-		ox, oy := v.Origin()
-		cx, cy := v.Cursor()
-		if err := v.SetCursor(cx, cy-1); err != nil && oy > 0 {
-			if err := v.SetOrigin(ox, oy-1); err != nil {
-				return err
-			}
-		}
-		uiState.selectedService = cy - 1
-	}
-	return nil
-}
 func selectServiceViewCursorDown(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	if v != nil {
 		cx, cy := v.Cursor()
@@ -425,35 +381,50 @@ var bindings = []binding{
 	binding{panelName: "Clusters", key: gocui.KeyEnter, handler: selectCluster},
 	binding{panelName: "Clusters", key: gocui.KeyArrowRight, handler: selectCluster},
 	binding{panelName: "Clusters", key: gocui.KeyArrowDown, handler: clustersViewCursorDown},
-	binding{panelName: "Clusters", key: gocui.KeyArrowUp, handler: clustersViewCursorUp},
+	binding{panelName: "Clusters", key: gocui.KeyArrowUp,
+		handler: cursorUp(func(uiState *uiStateType, position cursorPosition) {
+			uiState.selectedCluster = position.y
+		})},
 
 	binding{panelName: "Jobs", key: gocui.KeyArrowLeft,
 		handler: clearView("Jobs", "Clusters", func(uiState *uiStateType) { uiState.selectedJob = 0 })},
 	binding{panelName: "Jobs", key: gocui.KeyEnter, handler: selectJob},
 	binding{panelName: "Jobs", key: gocui.KeyArrowRight, handler: selectJob},
+	binding{panelName: "Jobs", key: gocui.KeyArrowUp,
+		handler: cursorUp(func(uiState *uiStateType, position cursorPosition) {
+			uiState.selectedJob = position.y
+		})},
 	binding{panelName: "Jobs", key: gocui.KeyArrowDown, handler: jobsViewCursorDown},
-	binding{panelName: "Jobs", key: gocui.KeyArrowUp, handler: jobsViewCursorUp},
 
 	binding{panelName: "Task Groups", key: gocui.KeyArrowLeft,
 		handler: clearView("Task Groups", "Jobs", func(uiState *uiStateType) { uiState.selectedTaskGroup = 0 })},
 	binding{panelName: "Task Groups", key: gocui.KeyEnter, handler: selectTaskGroup},
 	binding{panelName: "Task Groups", key: gocui.KeyArrowRight, handler: selectTaskGroup},
 	binding{panelName: "Task Groups", key: gocui.KeyArrowDown, handler: taskGroupsViewCursorDown},
-	binding{panelName: "Task Groups", key: gocui.KeyArrowUp, handler: taskGroupsViewCursorUp},
+	binding{panelName: "Task Groups", key: gocui.KeyArrowUp,
+		handler: cursorUp(func(uiState *uiStateType, position cursorPosition) {
+			uiState.selectedTaskGroup = position.y
+		})},
 
 	binding{panelName: "Tasks", key: gocui.KeyArrowLeft,
 		handler: clearView("Tasks", "Task Groups", func(uiState *uiStateType) { uiState.selectedTask = 0 })},
 	binding{panelName: "Tasks", key: gocui.KeyEnter, handler: selectTask},
 	binding{panelName: "Tasks", key: gocui.KeyArrowRight, handler: selectTask},
 	binding{panelName: "Tasks", key: gocui.KeyArrowDown, handler: tasksViewCursorDown},
-	binding{panelName: "Tasks", key: gocui.KeyArrowUp, handler: tasksViewCursorUp},
+	binding{panelName: "Tasks", key: gocui.KeyArrowUp,
+		handler: cursorUp(func(uiState *uiStateType, position cursorPosition) {
+			uiState.selectedTask = position.y
+		})},
 
 	binding{panelName: "Services", key: gocui.KeyArrowLeft,
 		handler: clearView("Services", "Tasks", func(uiState *uiStateType) { uiState.selectedService = 0 })},
 	binding{panelName: "Services", key: gocui.KeyEnter, handler: selectService},
 	binding{panelName: "Services", key: gocui.KeyArrowRight, handler: selectService},
 	binding{panelName: "Services", key: gocui.KeyArrowDown, handler: selectServiceViewCursorDown},
-	binding{panelName: "Services", key: gocui.KeyArrowUp, handler: selectServiceViewCursorUp},
+	binding{panelName: "Services", key: gocui.KeyArrowUp,
+		handler: cursorUp(func(uiState *uiStateType, position cursorPosition) {
+			uiState.selectedService = position.y
+		})},
 
 	binding{panelName: "Service", key: gocui.KeyEnter,
 		handler: clearView("Service", "Services", func(uiState *uiStateType) {})},

@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/hashicorp/nomad/api"
+	nomad "github.com/hashicorp/nomad/api"
 	"github.com/jroimartin/gocui"
 )
 
@@ -40,15 +40,15 @@ type uiStateType struct {
 }
 
 type trekStateType struct {
-	config                    *api.Config
-	client                    *api.Client
-	jobs                      []api.Job
-	jobsHandle                *api.Jobs
+	config                    *nomad.Config
+	client                    *nomad.Client
+	jobs                      []nomad.Job
+	jobsHandle                *nomad.Jobs
 	nomadConnectConfiguration configuration
 }
 
 var trekState trekStateType
-var options *api.QueryOptions
+var options *nomad.QueryOptions
 
 // used in CLI mode
 var jobID string
@@ -140,7 +140,7 @@ func selectCluster(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 		v.SelFgColor = gocui.ColorBlack
 		trekState.jobsHandle = trekState.client.Jobs()
 		jobListStubs, _, _ := trekState.jobsHandle.List(options)
-		trekState.jobs = make([]api.Job, 0)
+		trekState.jobs = make([]nomad.Job, 0)
 		for _, job := range jobListStubs {
 			fullJob, _, _ := trekState.jobsHandle.Info(job.ID, options)
 			trekState.jobs = append(trekState.jobs, *fullJob)
@@ -445,10 +445,10 @@ func usage() {
 func main() {
 	//connect to nomad
 	uiState := new(uiStateType)
-	trekState.config = api.DefaultConfig()
+	trekState.config = nomad.DefaultConfig()
 	var err error
-	trekState.client, err = api.NewClient(trekState.config)
-	options = &api.QueryOptions{}
+	trekState.client, err = nomad.NewClient(trekState.config)
+	options = &nomad.QueryOptions{}
 
 	parseFlags(uiState)
 
@@ -480,7 +480,7 @@ func main() {
 		allocs := trekState.client.Allocations()
 		allocsListStub, _, _ := allocs.List(options)
 		found := false
-		var foundAllocation *api.Allocation
+		var foundAllocation *nomad.Allocation
 		for _, stub := range allocsListStub {
 			alloc, _, err := allocs.Info(stub.ID, options)
 			if err != nil {

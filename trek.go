@@ -44,8 +44,6 @@ type trekStateType struct {
 	nomadConnectConfiguration configuration
 }
 
-var options *nomad.QueryOptions
-
 // used in CLI mode
 var jobID string
 
@@ -135,6 +133,8 @@ func selectCluster(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error 
 		v.SelBgColor = gocui.ColorGreen
 		v.SelFgColor = gocui.ColorBlack
 		trekState.jobsHandle = trekState.client.Jobs()
+
+		options := &nomad.QueryOptions{}
 		jobListStubs, _, _ := trekState.jobsHandle.List(options)
 		trekState.jobs = make([]nomad.Job, 0)
 		for _, job := range jobListStubs {
@@ -443,7 +443,7 @@ func usage() {
 func main() {
 	//connect to nomad
 	trekState := new(trekStateType)
-	options = &nomad.QueryOptions{}
+	options := &nomad.QueryOptions{}
 
 	var err error
 	trekState.client, err = nomad.NewClient(nomad.DefaultConfig())

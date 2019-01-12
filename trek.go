@@ -474,36 +474,45 @@ func main() {
 			log.Panicln(err)
 		}
 	} else {
-		fmt.Printf("Trying to get jobID \"%s\" (specified by -jobID)\n", jobID)
 		allocs := trekState.client.Allocations()
 		allocsListStub, _, _ := allocs.List(options)
-		found := false
-		var foundAllocation *nomad.Allocation
+		foundAllocations := make([]nomad.Allocation, 0)
 		for _, stub := range allocsListStub {
 			alloc, _, err := allocs.Info(stub.ID, options)
 			if err != nil {
 				log.Panicln(err)
 			}
-			if alloc.JobID == jobID && found == false {
-				found = true
-				foundAllocation = alloc
+			if alloc.JobID == jobID {
+				foundAllocations = append(foundAllocations, *alloc)
 			}
 		}
-		if found == false {
-			log.Panicf("Couldn't find the node onto which the job ID %s is running... Aborting\n", jobID)
+		if len(foundAllocations) == 0 {
+			jobsHandle := trekState.client.Jobs()
+			jobs, _, _ := jobsHandle.List(nil)
+
+			fmt.Printf("\"%s\" Not found.  Available jobs:\n", jobID)
+			for index, job := range jobs {
+				fmt.Printf("\t%d) %s\n", index+1, job.ID)
+			}
 		} else {
 			nodes := trekState.client.Nodes()
-			node, _, err := nodes.Info(foundAllocation.NodeID, options)
-			if err != nil {
-				log.Panicln(err)
-			}
-			fmt.Printf("%+v\n", node.Attributes["unique.network.ip-address"])
-			for _, service := range foundAllocation.Services {
-				fmt.Printf("Services %+v\n", service)
+
+			for _, foundAllocation := range foundAllocations {
+				node, _, err := nodes.Info(foundAllocation.NodeID, options)
+				ip := node.Attributes["unique.network.ip-address"]
+				if err != nil {
+					log.Panicln(err)
+				}
+				fmt.Printf("%s (%s)\n", foundAllocation.Name, foundAllocation.ID)
+				for _, task := range foundAllocation.TaskResources {
+					for _, network := range task.Networks {
+						for _, dynPort := range network.DynamicPorts {
+							fmt.Printf("\t%s => %s:%d\n", dynPort.Label, ip, dynPort.Value)
+						}
+					}
+				}
 			}
 
-			// jobs := client.Jobs()
-			// job, _, err := jobs.Info(jobID, options)
 		}
 	}
 }

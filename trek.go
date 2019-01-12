@@ -20,6 +20,8 @@ type environment struct {
 	Name    string
 	Address string
 }
+type clearViewCallback func()
+type uiHandlerType func(g *gocui.Gui, v *gocui.View) error
 
 var selectedCluster int = 0
 var selectedJob int = 0
@@ -384,59 +386,17 @@ func selectService(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func clearJobsView(g *gocui.Gui, v *gocui.View) error {
-	if err := g.DeleteView("Jobs"); err != nil {
-		return err
+func clearView(currentView string, newCurrentView string, handler clearViewCallback) uiHandlerType {
+	return func(g *gocui.Gui, v *gocui.View) error {
+		if err := g.DeleteView(currentView); err != nil {
+			return err
+		}
+		if _, err := g.SetCurrentView(newCurrentView); err != nil {
+			return err
+		}
+		handler()
+		return nil
 	}
-	if _, err := g.SetCurrentView("Clusters"); err != nil {
-		return err
-	}
-	selectedJob = 0
-	return nil
-}
-
-func clearTaskGroupsView(g *gocui.Gui, v *gocui.View) error {
-	if err := g.DeleteView("Task Groups"); err != nil {
-		return err
-	}
-	if _, err := g.SetCurrentView("Jobs"); err != nil {
-		return err
-	}
-	selectedTaskGroup = 0
-	return nil
-}
-
-func clearTasksView(g *gocui.Gui, v *gocui.View) error {
-	if err := g.DeleteView("Tasks"); err != nil {
-		return err
-	}
-	if _, err := g.SetCurrentView("Task Groups"); err != nil {
-		return err
-	}
-	selectedTask = 0
-	return nil
-}
-
-func clearServicesView(g *gocui.Gui, v *gocui.View) error {
-	if err := g.DeleteView("Services"); err != nil {
-		return err
-	}
-	if _, err := g.SetCurrentView("Tasks"); err != nil {
-		return err
-	}
-	selectedService = 0
-	return nil
-}
-
-func clearServiceView(g *gocui.Gui, v *gocui.View) error {
-	if err := g.DeleteView("Service"); err != nil {
-		return err
-	}
-	if _, err := g.SetCurrentView("Services"); err != nil {
-		return err
-	}
-	selectedService = 0
-	return nil
 }
 
 // binding is some binding
@@ -446,50 +406,46 @@ type binding struct {
 	handler   func(*gocui.Gui, *gocui.View) error
 }
 
-func clearConfirmation(g *gocui.Gui, v *gocui.View) error {
-	if err := g.DeleteView("msg"); err != nil {
-		return err
-	}
-	if _, err := g.SetCurrentView("Tasks"); err != nil {
-		return err
-	}
-	return nil
-}
-
 var bindings = []binding{
 	binding{panelName: "Clusters", key: gocui.KeyEnter, handler: selectCluster},
 	binding{panelName: "Clusters", key: gocui.KeyArrowRight, handler: selectCluster},
 	binding{panelName: "Clusters", key: gocui.KeyArrowDown, handler: clustersViewCursorDown},
 	binding{panelName: "Clusters", key: gocui.KeyArrowUp, handler: clustersViewCursorUp},
 
-	binding{panelName: "Jobs", key: gocui.KeyArrowLeft, handler: clearJobsView},
+	binding{panelName: "Jobs", key: gocui.KeyArrowLeft,
+		handler: clearView("Jobs", "Clusters", func() { selectedJob = 0 })},
 	binding{panelName: "Jobs", key: gocui.KeyEnter, handler: selectJob},
 	binding{panelName: "Jobs", key: gocui.KeyArrowRight, handler: selectJob},
 	binding{panelName: "Jobs", key: gocui.KeyArrowDown, handler: jobsViewCursorDown},
 	binding{panelName: "Jobs", key: gocui.KeyArrowUp, handler: jobsViewCursorUp},
 
-	binding{panelName: "Task Groups", key: gocui.KeyArrowLeft, handler: clearTaskGroupsView},
+	binding{panelName: "Task Groups", key: gocui.KeyArrowLeft,
+		handler: clearView("Task Groups", "Jobs", func() { selectedTaskGroup = 0 })},
 	binding{panelName: "Task Groups", key: gocui.KeyEnter, handler: selectTaskGroup},
 	binding{panelName: "Task Groups", key: gocui.KeyArrowRight, handler: selectTaskGroup},
 	binding{panelName: "Task Groups", key: gocui.KeyArrowDown, handler: taskGroupsViewCursorDown},
 	binding{panelName: "Task Groups", key: gocui.KeyArrowUp, handler: taskGroupsViewCursorUp},
 
-	binding{panelName: "Tasks", key: gocui.KeyArrowLeft, handler: clearTasksView},
+	binding{panelName: "Tasks", key: gocui.KeyArrowLeft,
+		handler: clearView("Tasks", "Task Groups", func() { selectedTask = 0 })},
 	binding{panelName: "Tasks", key: gocui.KeyEnter, handler: selectTask},
 	binding{panelName: "Tasks", key: gocui.KeyArrowRight, handler: selectTask},
 	binding{panelName: "Tasks", key: gocui.KeyArrowDown, handler: tasksViewCursorDown},
 	binding{panelName: "Tasks", key: gocui.KeyArrowUp, handler: tasksViewCursorUp},
 
-	binding{panelName: "Services", key: gocui.KeyArrowLeft, handler: clearServicesView},
+	binding{panelName: "Services", key: gocui.KeyArrowLeft,
+		handler: clearView("Services", "Tasks", func() { selectedService = 0 })},
 	binding{panelName: "Services", key: gocui.KeyEnter, handler: selectService},
 	binding{panelName: "Services", key: gocui.KeyArrowRight, handler: selectService},
 	binding{panelName: "Services", key: gocui.KeyArrowDown, handler: selectServiceViewCursorDown},
 	binding{panelName: "Services", key: gocui.KeyArrowUp, handler: selectServiceViewCursorUp},
 
-	binding{panelName: "Service", key: gocui.KeyEnter, handler: clearServiceView},
+	binding{panelName: "Service", key: gocui.KeyEnter,
+		handler: clearView("Service", "Services", func() {})},
 
 	binding{panelName: "", key: gocui.KeyCtrlC, handler: quit},
-	binding{panelName: "msg", key: gocui.KeyEnter, handler: clearConfirmation},
+	binding{panelName: "msg", key: gocui.KeyEnter,
+		handler: clearView("msg", "Tasks", func() {})},
 }
 
 func keybindings(g *gocui.Gui) error {

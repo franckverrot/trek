@@ -58,7 +58,6 @@ func stateify(handler uiHandlerWithStateType, uiState *uiStateType) uiHandlerTyp
 	}
 }
 
-// func clearView(currentView string, newCurrentView string, handler clearViewCallback) uiHandlerType {
 func clustersViewCursorDown(g *gocui.Gui, v *gocui.View, uiState *uiStateType) error {
 	if v != nil {
 		cx, cy := v.Cursor()

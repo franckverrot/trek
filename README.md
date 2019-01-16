@@ -4,6 +4,9 @@
 
 Trek is an interface to explore Nomad clusters.
 
+![In Action](https://raw.githubusercontent.com/franckverrot/trek/master/assets/jan-15-screenshot.png)
+
+
 ## SETUP
 
 ### Binary Release
@@ -30,12 +33,23 @@ Get to revisions, and download a binary.
 
 ### Trek Configuration File
 
-TBD.  See .trek.rc for now.
+#### Example
+
+```
+{ "Environments" : [ { "Name" : "development" , "Address" : "http://127.0.0.1:4646" }
+                   ]
+}
+```
+
+#### Options
+
+  * `Environments`: List of environments (given a name and address) Trek can connect to
+
+
 
 ## Todo
 
 * [ ] Make it easy to SSH into a node
-* [ ] Make it easy to get an IP:port for a service
 * [ ] Better UI
 * [ ] More options
 

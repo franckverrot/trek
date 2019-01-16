@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"reflect"
+	"sort"
 	"strings"
 
 	nomad "github.com/hashicorp/nomad/api"
@@ -44,9 +45,11 @@ type uiHandlerWithStateType func(g *gocui.Gui, v *gocui.View, trekState *trekSta
 type trekStateType struct {
 	selectedCluster           int
 	selectedJob               int
-	selectedTaskGroup         int
+	selectedAllocationGroup   int
+	selectedAllocationIndex   int
+	foundAllocations          []nomad.Allocation
 	selectedTask              int
-	selectedService           int
+	foundTasks                []nomad.Task
 	showUI                    bool
 	client                    *nomad.Client
 	jobs                      []nomad.Job
@@ -212,7 +215,7 @@ func selectJob(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 func selectTaskGroup(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 	return createView(g, trekState,
 		trekView{
-			name: "Tasks",
+			name: "Allocations",
 			foregroundAfterCreation: true,
 			panelNum:                3,
 			panelsTotal:             5,
@@ -224,20 +227,37 @@ func selectTaskGroup(g *gocui.Gui, v *gocui.View, trekState *trekStateType) erro
 				view.Editable = false
 				view.Wrap = false
 
-				taskGroup := trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedTaskGroup]
+				taskGroup := trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedAllocationGroup]
 
-				for _, task := range taskGroup.Tasks {
-					fmt.Fprintf(view, "%s (%s)\n", (task.Name), (task.Driver))
+				options := &nomad.QueryOptions{}
+				allocs := trekState.client.Allocations()
+				allocsListStub, _, _ := allocs.List(options)
+
+				for _, stub := range allocsListStub {
+					alloc, _, err := allocs.Info(stub.ID, options)
+					if err != nil {
+						log.Panicln(err)
+					}
+					if alloc.TaskGroup == *taskGroup.Name {
+						if alloc.ClientStatus == "running" {
+							trekState.foundAllocations = append(trekState.foundAllocations, *alloc)
+						}
+					}
+				}
+				sort.SliceStable(trekState.foundAllocations, func(i, j int) bool { return trekState.foundAllocations[i].Name < trekState.foundAllocations[j].Name })
+
+				for _, all := range trekState.foundAllocations {
+					fmt.Fprintf(view, "%s\n", all.Name)
 				}
 
 				return nil
 			}})
 }
 
-func selectTask(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
+func selectAllocation(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 	return createView(g, trekState,
 		trekView{
-			name: "Services",
+			name: "Tasks",
 			foregroundAfterCreation: true,
 			panelNum:                4,
 			panelsTotal:             5,
@@ -249,43 +269,94 @@ func selectTask(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 				view.Editable = false
 				view.Wrap = false
 
-				task := trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedTaskGroup].Tasks[trekState.selectedTask]
+				trekState.foundTasks = make([]nomad.Task, 0)
 
-				for _, service := range task.Services {
-					fmt.Fprintf(view, "%s\n", (service.Name))
+				for _, task := range trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedAllocationGroup].Tasks {
+					trekState.foundTasks = append(trekState.foundTasks, *task)
+				}
+				sort.SliceStable(trekState.foundTasks, func(i, j int) bool { return trekState.foundTasks[i].Name < trekState.foundTasks[j].Name })
+
+				for _, task := range trekState.foundTasks {
+					fmt.Fprintf(view, "%s\n", task.Name)
 				}
 
 				return nil
 			}})
 }
 
-func selectService(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
+func selectTask(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 	return createView(g, trekState,
 		trekView{
-			name: "Service",
+			name: "Task",
 			foregroundAfterCreation: true,
 			panelNum:                0,
 			panelsTotal:             1,
 			margin:                  10,
 			handler: func(view *gocui.View, trekState *trekStateType) error {
-				view.Highlight = true
 				view.SelBgColor = gocui.ColorGreen
 				view.SelFgColor = gocui.ColorBlack
 				view.Editable = false
 				view.Wrap = false
 
-				service := trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedTaskGroup].Tasks[trekState.selectedTask].Services[trekState.selectedService]
+				task := trekState.foundTasks[trekState.selectedTask]
 
-				val := reflect.Indirect(reflect.ValueOf(service))
-				valType := val.Type()
-
-				for i := 0; i < val.NumField(); i++ {
-					field := valType.Field(i)
-					value := val.FieldByName(field.Name).Interface()
-					name := field.Name
-
-					fmt.Fprintf(view, "%s: %+v\n", name, value)
+				currentAllocation := trekState.foundAllocations[trekState.selectedAllocationIndex]
+				options := &nomad.QueryOptions{}
+				nodes := trekState.client.Nodes()
+				node, _, err := nodes.Info(currentAllocation.NodeID, options)
+				if err != nil {
+					log.Panicln(err)
 				}
+				ip := node.Attributes["unique.network.ip-address"]
+				taskResource := currentAllocation.TaskResources[task.Name]
+				fmt.Fprintf(view, "* Name: %s\n", task.Name)
+				fmt.Fprintf(view, "* Node Name: %s\n", node.Name)
+				fmt.Fprintf(view, "* Node IP: %s\n", ip)
+				fmt.Fprintf(view, "* Driver: %s\n", task.Driver)
+				for k, v := range task.Config {
+					fmt.Fprintf(view, "\t* %s: %+v\n", k, v)
+				}
+				if len(task.Env) > 0 {
+					fmt.Fprintf(view, "* Env:\n")
+					for k, v := range task.Env {
+						fmt.Fprintf(view, "\t* %s: %s\n", k, v)
+					}
+				}
+				for _, network := range taskResource.Networks {
+					if len(network.DynamicPorts) > 0 {
+
+						fmt.Fprintf(view, "* Dynamic Ports: ")
+						for idx, dynPort := range network.DynamicPorts {
+							if idx > 0 {
+								fmt.Fprintf(view, ", ")
+							}
+							fmt.Fprintf(view, "%d (%s)", dynPort.Value, dynPort.Label)
+						}
+						fmt.Fprintf(view, "\n")
+					}
+					if len(network.ReservedPorts) > 0 {
+						fmt.Fprintf(view, "* Reserved Ports: ")
+						for idx, dynPort := range network.ReservedPorts {
+							if idx > 0 {
+								fmt.Fprintf(view, ", ")
+							}
+							fmt.Fprintf(view, "%d (%s)", dynPort.Value, dynPort.Label)
+						}
+						fmt.Fprintf(view, "\n")
+					}
+				}
+				// if(trekState.debugModeEnabled) {
+				// val := reflect.Indirect(reflect.ValueOf(task))
+				// valType := val.Type()
+
+				// for i := 0; i < val.NumField(); i++ {
+				// 	field := valType.Field(i)
+				// 	value := val.FieldByName(field.Name).Interface()
+				// 	name := field.Name
+
+				// 	fmt.Fprintf(view, "%s: %+v\n", name, value)
+				// }
+				// }
 
 				return nil
 			}})
@@ -335,54 +406,61 @@ var bindings = []binding{
 		func(trekState *trekStateType) int { return len(trekState.jobs) })},
 
 	binding{panelName: "Task Groups", key: gocui.KeyArrowLeft,
-		handler: deleteView("Task Groups", "Jobs", func(trekState *trekStateType) { trekState.selectedTaskGroup = 0 })},
+		handler: deleteView("Task Groups", "Jobs", func(trekState *trekStateType) { trekState.selectedAllocationGroup = 0 })},
 	binding{panelName: "Task Groups", key: gocui.KeyEnter, handler: selectTaskGroup},
 	binding{panelName: "Task Groups", key: gocui.KeyArrowRight, handler: selectTaskGroup},
 	binding{panelName: "Task Groups", key: gocui.KeyArrowDown, handler: cursorDown(
-		func(trekState *trekStateType, position cursorPosition) { trekState.selectedTaskGroup = position.y },
+		func(trekState *trekStateType, position cursorPosition) {
+			trekState.selectedAllocationGroup = position.y
+		},
 		func(trekState *trekStateType) int { return len(trekState.jobs[trekState.selectedJob].TaskGroups) })},
 	binding{panelName: "Task Groups", key: gocui.KeyArrowUp,
 		handler: cursorUp(func(trekState *trekStateType, position cursorPosition) {
-			trekState.selectedTaskGroup = position.y
+			trekState.selectedAllocationGroup = position.y
+		})},
+
+	binding{panelName: "Allocations", key: gocui.KeyArrowLeft,
+		handler: deleteView("Allocations", "Task Groups", func(trekState *trekStateType) {
+			trekState.selectedAllocationIndex = 0
+			trekState.foundAllocations = make([]nomad.Allocation, 0)
+		})},
+	binding{panelName: "Allocations", key: gocui.KeyEnter, handler: selectAllocation},
+	binding{panelName: "Allocations", key: gocui.KeyArrowRight, handler: selectAllocation},
+	binding{panelName: "Allocations", key: gocui.KeyArrowDown,
+		handler: cursorDown(
+			func(trekState *trekStateType, position cursorPosition) {
+				trekState.selectedAllocationIndex = position.y
+			},
+			func(trekState *trekStateType) int {
+				return len(trekState.foundAllocations)
+			})},
+	binding{panelName: "Allocations", key: gocui.KeyArrowUp,
+		handler: cursorUp(func(trekState *trekStateType, position cursorPosition) {
+			trekState.selectedAllocationIndex = position.y
 		})},
 
 	binding{panelName: "Tasks", key: gocui.KeyArrowLeft,
-		handler: deleteView("Tasks", "Task Groups", func(trekState *trekStateType) { trekState.selectedTask = 0 })},
+		handler: deleteView("Tasks", "Allocations", func(trekState *trekStateType) { trekState.selectedTask = 0 })},
 	binding{panelName: "Tasks", key: gocui.KeyEnter, handler: selectTask},
 	binding{panelName: "Tasks", key: gocui.KeyArrowRight, handler: selectTask},
 	binding{panelName: "Tasks", key: gocui.KeyArrowDown,
 		handler: cursorDown(
 			func(trekState *trekStateType, position cursorPosition) { trekState.selectedTask = position.y },
 			func(trekState *trekStateType) int {
-				return len(trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedTaskGroup].Tasks)
+				return len(trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedAllocationGroup].Tasks)
 			})},
 	binding{panelName: "Tasks", key: gocui.KeyArrowUp,
 		handler: cursorUp(func(trekState *trekStateType, position cursorPosition) {
 			trekState.selectedTask = position.y
 		})},
 
-	binding{panelName: "Services", key: gocui.KeyArrowLeft,
-		handler: deleteView("Services", "Tasks", func(trekState *trekStateType) { trekState.selectedService = 0 })},
-	binding{panelName: "Services", key: gocui.KeyEnter, handler: selectService},
-	binding{panelName: "Services", key: gocui.KeyArrowRight, handler: selectService},
-	binding{panelName: "Services", key: gocui.KeyArrowDown,
-		handler: cursorDown(
-			func(trekState *trekStateType, position cursorPosition) { trekState.selectedService = position.y },
-			func(trekState *trekStateType) int {
-				return len(trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedTaskGroup].Tasks[trekState.selectedTask].Services)
-			})},
-	binding{panelName: "Services", key: gocui.KeyArrowUp,
-		handler: cursorUp(func(trekState *trekStateType, position cursorPosition) {
-			trekState.selectedService = position.y
-		})},
-
-	binding{panelName: "Service", key: gocui.KeyEnter,
-		handler: deleteView("Service", "Services", func(trekState *trekStateType) {})},
+	binding{panelName: "Task", key: gocui.KeyEnter,
+		handler: deleteView("Task", "Tasks", func(trekState *trekStateType) {})},
 
 	binding{panelName: "", key: gocui.KeyCtrlC, handler: quit},
 	binding{panelName: "", key: gocui.KeyF12, handler: quit},
 	binding{panelName: "msg", key: gocui.KeyEnter,
-		handler: deleteView("msg", "Tasks", func(trekState *trekStateType) {})},
+		handler: deleteView("msg", "Allocations", func(trekState *trekStateType) {})},
 }
 
 func keybindings(g *gocui.Gui, trekState *trekStateType) error {
@@ -585,8 +663,8 @@ func showCLI(trekState *trekStateType) {
 				log.Panicln(err)
 			}
 			fmt.Printf("%s (%s)\n", foundAllocation.Name, foundAllocation.ID)
-			for _, task := range foundAllocation.TaskResources {
-				for _, network := range task.Networks {
+			for _, taskResource := range foundAllocation.TaskResources {
+				for _, network := range taskResource.Networks {
 					for _, dynPort := range network.DynamicPorts {
 						fmt.Printf("\t%s => %s:%d\n", dynPort.Label, ip, dynPort.Value)
 					}

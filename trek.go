@@ -15,16 +15,26 @@ import (
 )
 
 type configuration struct {
-	Environments []environment
+	Environments *[]environment
 }
+
 type environment struct {
 	Name    string
 	Address string
 }
+
+func (config *configuration) addEnvironment(name string, address string) {
+	if config.Environments == nil {
+		config.Environments = new([]environment)
+	}
+	*config.Environments = append(*config.Environments, environment{Name: name, Address: address})
+}
+
 type cursorPosition struct {
 	x int
 	y int
 }
+
 type trekView struct {
 	name                    string
 	foregroundAfterCreation bool
@@ -43,7 +53,7 @@ type uiHandlerType func(g *gocui.Gui, v *gocui.View) error
 type uiHandlerWithStateType func(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error
 
 type trekStateType struct {
-	selectedCluster           int
+	selectedClusterIndex      int
 	selectedJob               int
 	selectedAllocationGroup   int
 	selectedAllocationIndex   int
@@ -54,6 +64,22 @@ type trekStateType struct {
 	client                    *nomad.Client
 	jobs                      []nomad.Job
 	nomadConnectConfiguration configuration
+}
+
+func (trekState *trekStateType) CurrentEnvironment() environment {
+	return (*trekState.nomadConnectConfiguration.Environments)[trekState.selectedClusterIndex]
+}
+func (trekState *trekStateType) CurrentAllocation() nomad.Allocation {
+	return trekState.foundAllocations[trekState.selectedAllocationIndex]
+}
+func (trekState *trekStateType) CurrentJob() nomad.Job {
+	return trekState.jobs[trekState.selectedJob]
+}
+func (trekState *trekStateType) CurrentTaskGroup() nomad.TaskGroup {
+	return *trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedAllocationGroup]
+}
+func (trekState *trekStateType) CurrentTasks() []*nomad.Task {
+	return trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedAllocationGroup].Tasks
 }
 
 // used in CLI mode
@@ -170,6 +196,15 @@ func selectCluster(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error 
 				view.Editable = false
 				view.Wrap = false
 
+				var err error
+				config := nomad.DefaultConfig()
+				config.Address = trekState.CurrentEnvironment().Address
+				trekState.client, err = nomad.NewClient(config)
+
+				if err != nil {
+					log.Panicln(err)
+				}
+
 				options := &nomad.QueryOptions{}
 				jobListStubs, _, _ := trekState.client.Jobs().List(options)
 				trekState.jobs = make([]nomad.Job, 0)
@@ -202,7 +237,7 @@ func selectJob(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 				view.Editable = false
 				view.Wrap = false
 
-				job := trekState.jobs[trekState.selectedJob]
+				job := trekState.CurrentJob()
 
 				for _, taskGroup := range job.TaskGroups {
 					fmt.Fprintf(view, "%s (%d)\n", *(taskGroup.Name), *(taskGroup.Count))
@@ -227,7 +262,7 @@ func selectTaskGroup(g *gocui.Gui, v *gocui.View, trekState *trekStateType) erro
 				view.Editable = false
 				view.Wrap = false
 
-				taskGroup := trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedAllocationGroup]
+				taskGroup := trekState.CurrentTaskGroup()
 
 				options := &nomad.QueryOptions{}
 				allocs := trekState.client.Allocations()
@@ -271,7 +306,7 @@ func selectAllocation(g *gocui.Gui, v *gocui.View, trekState *trekStateType) err
 
 				trekState.foundTasks = make([]nomad.Task, 0)
 
-				for _, task := range trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedAllocationGroup].Tasks {
+				for _, task := range trekState.CurrentTasks() {
 					trekState.foundTasks = append(trekState.foundTasks, *task)
 				}
 				sort.SliceStable(trekState.foundTasks, func(i, j int) bool { return trekState.foundTasks[i].Name < trekState.foundTasks[j].Name })
@@ -300,7 +335,7 @@ func selectTask(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 
 				task := trekState.foundTasks[trekState.selectedTask]
 
-				currentAllocation := trekState.foundAllocations[trekState.selectedAllocationIndex]
+				currentAllocation := trekState.CurrentAllocation()
 				options := &nomad.QueryOptions{}
 				nodes := trekState.client.Nodes()
 				node, _, err := nodes.Info(currentAllocation.NodeID, options)
@@ -386,11 +421,11 @@ var bindings = []binding{
 	binding{panelName: "Clusters", key: gocui.KeyEnter, handler: selectCluster},
 	binding{panelName: "Clusters", key: gocui.KeyArrowRight, handler: selectCluster},
 	binding{panelName: "Clusters", key: gocui.KeyArrowDown, handler: cursorDown(
-		func(trekState *trekStateType, position cursorPosition) { trekState.selectedCluster = position.y },
-		func(trekState *trekStateType) int { return len(trekState.nomadConnectConfiguration.Environments) })},
+		func(trekState *trekStateType, position cursorPosition) { trekState.selectedClusterIndex = position.y },
+		func(trekState *trekStateType) int { return len(*trekState.nomadConnectConfiguration.Environments) })},
 	binding{panelName: "Clusters", key: gocui.KeyArrowUp,
 		handler: cursorUp(func(trekState *trekStateType, position cursorPosition) {
-			trekState.selectedCluster = position.y
+			trekState.selectedClusterIndex = position.y
 		})},
 
 	binding{panelName: "Jobs", key: gocui.KeyArrowLeft,
@@ -566,18 +601,28 @@ func layout(trekState *trekStateType) layoutType {
 					view.SelBgColor = gocui.ColorGreen
 					view.SelFgColor = gocui.ColorBlack
 					file, err := os.Open(".trek.rc")
+
 					if err != nil {
-						log.Panicln(err)
-					}
-					decoder := json.NewDecoder(file)
-					trekState.nomadConnectConfiguration = configuration{}
-					err = decoder.Decode(&trekState.nomadConnectConfiguration)
-					if err != nil {
-						log.Panicln(err)
+						// Can't find configuration file, applying default configuration
+						address := os.Getenv("NOMAD_ADDR")
+						if address == "" {
+							// Defaulting on localhost
+							address = "http://localhost:4646"
+						}
+						trekState.nomadConnectConfiguration.addEnvironment("default", address)
+					} else {
+
+						decoder := json.NewDecoder(file)
+						trekState.nomadConnectConfiguration = configuration{}
+						err = decoder.Decode(&trekState.nomadConnectConfiguration)
+						if err != nil {
+							log.Panicln(err)
+						}
+
 					}
 
-					for _, env := range trekState.nomadConnectConfiguration.Environments {
-						fmt.Fprintf(view, "%s\n", env.Name)
+					for _, env := range *trekState.nomadConnectConfiguration.Environments {
+						fmt.Fprintf(view, "%s\n", (env).Name)
 					}
 
 					return nil
@@ -632,6 +677,13 @@ func showUI(trekState *trekStateType) {
 }
 
 func showCLI(trekState *trekStateType) {
+	var err error
+	trekState.client, err = nomad.NewClient(nomad.DefaultConfig())
+
+	if err != nil {
+		log.Panicln(err)
+	}
+
 	options := &nomad.QueryOptions{}
 	allocs := trekState.client.Allocations()
 	allocsListStub, _, _ := allocs.List(options)
@@ -679,14 +731,7 @@ func main() {
 	//connect to nomad
 	trekState := new(trekStateType)
 
-	var err error
-	trekState.client, err = nomad.NewClient(nomad.DefaultConfig())
-
 	parseFlags(trekState)
-
-	if err != nil {
-		log.Panicln(err)
-	}
 
 	if trekState.showUI {
 		showUI(trekState)

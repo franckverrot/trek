@@ -86,7 +86,7 @@ func quit(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 	return gocui.ErrQuit
 }
 
-func createView(g *gocui.Gui, trekState *trekStateType, view trekView) error {
+func createView(g *gocui.Gui, view trekView, trekState *trekStateType) error {
 	maxX, maxY := g.Size()
 	bounds := getBounds(maxX, maxY, view.panelNum, view.panelsTotal, view.margin)
 	if v, err := g.SetView(view.name, bounds.startX, bounds.startY, bounds.endX, bounds.endY); err != nil {
@@ -108,7 +108,7 @@ func createView(g *gocui.Gui, trekState *trekStateType, view trekView) error {
 }
 
 func selectCluster(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
-	return createView(g, trekState,
+	return createView(g,
 		trekView{
 			name:                    "Jobs",
 			foregroundAfterCreation: true,
@@ -132,7 +132,10 @@ func selectCluster(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error 
 				}
 
 				return nil
-			}})
+			},
+		},
+		trekState,
+	)
 }
 
 func selectJob(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
@@ -140,7 +143,7 @@ func selectJob(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 		return nil
 	}
 
-	return createView(g, trekState,
+	return createView(g,
 		trekView{
 			name:                    "Task Groups",
 			foregroundAfterCreation: true,
@@ -161,11 +164,14 @@ func selectJob(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 				}
 
 				return nil
-			}})
+			},
+		},
+		trekState,
+	)
 }
 
 func selectTaskGroup(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
-	return createView(g, trekState,
+	return createView(g,
 		trekView{
 			name:                    "Allocations",
 			foregroundAfterCreation: true,
@@ -184,11 +190,14 @@ func selectTaskGroup(g *gocui.Gui, v *gocui.View, trekState *trekStateType) erro
 				}
 
 				return nil
-			}})
+			},
+		},
+		trekState,
+	)
 }
 
 func selectAllocation(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
-	return createView(g, trekState,
+	return createView(g,
 		trekView{
 			name:                    "Tasks",
 			foregroundAfterCreation: true,
@@ -207,11 +216,14 @@ func selectAllocation(g *gocui.Gui, v *gocui.View, trekState *trekStateType) err
 				}
 
 				return nil
-			}})
+			},
+		},
+		trekState,
+	)
 }
 
 func selectTask(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
-	return createView(g, trekState,
+	return createView(g,
 		trekView{
 			name:                    "Task",
 			foregroundAfterCreation: true,
@@ -279,7 +291,10 @@ func selectTask(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 				// }
 
 				return nil
-			}})
+			},
+		},
+		trekState,
+	)
 }
 
 func deleteView(currentView string, newCurrentView string, handler deleteViewCallback) uiHandlerWithStateType {
@@ -458,7 +473,7 @@ func layout(trekState *trekStateType) layoutType {
 		}
 
 		initialized = true
-		return createView(g, trekState,
+		return createView(g,
 			trekView{
 				name:                    "Clusters",
 				foregroundAfterCreation: true,
@@ -496,7 +511,10 @@ func layout(trekState *trekStateType) layoutType {
 					}
 
 					return nil
-				}})
+				},
+			},
+			trekState,
+		)
 	}
 }
 

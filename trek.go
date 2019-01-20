@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -516,25 +515,6 @@ func layout(trekState *trekStateType) layoutType {
 			trekState,
 		)
 	}
-}
-
-func parseFlags() trekOptions {
-	options := new(cliOptions)
-	flag.BoolVar(&(*options).help, "help", false, "show usage prompt")
-	flag.BoolVar(&(*options).ncurses, "ui", false, "use UI mode")
-	flag.StringVar(&(*options).jobID, "jobID", "", "jobID to get (only used when running in non-ui mode)")
-
-	flag.Parse()
-
-	return trekOptions{
-		jobID:    (*options).jobID,
-		trekMode: (*options).DetermineMode(),
-	}
-}
-
-func usage() {
-	fmt.Fprintf(os.Stderr, "usage: %s [options]\n", os.Args[0])
-	flag.PrintDefaults()
 }
 
 func showUI(options trekOptions) {

@@ -518,7 +518,7 @@ func layout(trekState *trekStateType) layoutType {
 	}
 }
 
-func parseFlags(trekState *trekStateType) trekOptions {
+func parseFlags() trekOptions {
 	options := new(cliOptions)
 	flag.BoolVar(&(*options).help, "help", false, "show usage prompt")
 	flag.BoolVar(&(*options).ncurses, "ui", false, "use UI mode")
@@ -537,7 +537,9 @@ func usage() {
 	flag.PrintDefaults()
 }
 
-func showUI(trekState *trekStateType) {
+func showUI(options trekOptions) {
+	trekState := new(trekStateType)
+
 	// build ui
 	g, err := gocui.NewGui(gocui.OutputNormal)
 	if err != nil {
@@ -558,25 +560,26 @@ func showUI(trekState *trekStateType) {
 	}
 }
 
-func showCLI(trekState *trekStateType, jobID string) {
+func showCLI(trekOptions trekOptions) {
 	var err error
 
+	trekState := new(trekStateType)
 	trekState.client, err = nomad.NewClient(nomad.DefaultConfig())
 
 	if err != nil {
 		log.Panicln(err)
 	}
 
-	options := &nomad.QueryOptions{}
+	nomadOptions := &nomad.QueryOptions{}
 	allocs := trekState.client.Allocations()
-	allocsListStub, _, _ := allocs.List(options)
+	allocsListStub, _, _ := allocs.List(nomadOptions)
 	foundAllocations := make([]nomad.Allocation, 0)
 	for _, stub := range allocsListStub {
-		alloc, _, err := allocs.Info(stub.ID, options)
+		alloc, _, err := allocs.Info(stub.ID, nomadOptions)
 		if err != nil {
 			log.Panicln(err)
 		}
-		if alloc.JobID == jobID {
+		if alloc.JobID == trekOptions.jobID {
 			foundAllocations = append(foundAllocations, *alloc)
 		}
 	}
@@ -584,7 +587,7 @@ func showCLI(trekState *trekStateType, jobID string) {
 		jobsHandle := trekState.client.Jobs()
 		jobs, _, _ := jobsHandle.List(nil)
 
-		fmt.Printf("\"%s\" Not found.  Available jobs:\n", jobID)
+		fmt.Printf("\"%s\" Not found.  Available jobs:\n", trekOptions.jobID)
 		for index, job := range jobs {
 			fmt.Printf("\t%d) %s\n", index+1, job.ID)
 		}
@@ -592,7 +595,7 @@ func showCLI(trekState *trekStateType, jobID string) {
 		nodes := trekState.client.Nodes()
 
 		for _, foundAllocation := range foundAllocations {
-			node, _, err := nodes.Info(foundAllocation.NodeID, options)
+			node, _, err := nodes.Info(foundAllocation.NodeID, nomadOptions)
 			ip := node.Attributes["unique.network.ip-address"]
 			if err != nil {
 				log.Panicln(err)
@@ -606,23 +609,5 @@ func showCLI(trekState *trekStateType, jobID string) {
 				}
 			}
 		}
-	}
-}
-
-func main() {
-	//connect to nomad
-	trekState := new(trekStateType)
-
-	options := parseFlags(trekState)
-
-	switch options.trekMode {
-	case NcursesMode:
-		showUI(trekState)
-	case OneOffMode:
-		showCLI(trekState, options.jobID)
-	case HelpMode:
-		usage()
-	default:
-		log.Panicf("trek: unknown mode %+v\n", options.trekMode)
 	}
 }

@@ -239,7 +239,7 @@ func selectTask(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 				task := trekState.CurrentTask()
 
 				currentAllocation := trekState.CurrentAllocation()
-				ip := currentAllocation.Ip()
+				ip := currentAllocation.IP()
 				taskResource := currentAllocation.allocation.TaskResources[task.Name]
 				fmt.Fprintf(view, "* Name: %s\n", task.Name)
 				fmt.Fprintf(view, "* Node Name: %s\n", currentAllocation.node.Name)
@@ -424,7 +424,7 @@ func getBounds(maxX int, maxY int, currentPanel int, totalPanels int, margin int
 		endY:   endY - margin}
 }
 
-var initialized bool = false
+var initialized = false
 
 func layout(trekState *trekStateType) layoutType {
 	return func(g *gocui.Gui) error {
@@ -453,7 +453,7 @@ func layout(trekState *trekStateType) layoutType {
 		}
 
 		offset += 2
-		menu_items := []string{"F1:DEBUG", "F12:EXIT"}
+		menuItems := []string{"F1:DEBUG", "F12:EXIT"}
 
 		if v, err := g.SetView("menu_items", startX+offset, startY, endX, endY); err != nil {
 			if err != gocui.ErrUnknownView {
@@ -464,7 +464,7 @@ func layout(trekState *trekStateType) layoutType {
 			v.BgColor = gocui.ColorGreen
 			v.FgColor = gocui.ColorBlack
 
-			for index, optionName := range menu_items {
+			for index, optionName := range menuItems {
 				if index > 0 {
 					fmt.Fprintf(v, " | ")
 				}
@@ -518,11 +518,18 @@ func layout(trekState *trekStateType) layoutType {
 	}
 }
 
-func parseFlags(trekState *trekStateType, jobID *string) {
-	flag.BoolVar(&trekState.showUI, "ui", true, "whether to show the ncurses UI or not")
-	flag.StringVar(jobID, "jobID", "", "jobID to get")
+func parseFlags(trekState *trekStateType) trekOptions {
+	options := new(cliOptions)
+	flag.BoolVar(&(*options).help, "help", false, "show usage prompt")
+	flag.BoolVar(&(*options).ncurses, "ui", false, "use UI mode")
+	flag.StringVar(&(*options).jobID, "jobID", "", "jobID to get (only used when running in non-ui mode)")
 
 	flag.Parse()
+
+	return trekOptions{
+		jobID:    (*options).jobID,
+		trekMode: (*options).DetermineMode(),
+	}
 }
 
 func usage() {
@@ -599,7 +606,6 @@ func showCLI(trekState *trekStateType, jobID string) {
 				}
 			}
 		}
-
 	}
 }
 
@@ -607,12 +613,16 @@ func main() {
 	//connect to nomad
 	trekState := new(trekStateType)
 
-	var jobID string
-	parseFlags(trekState, &jobID)
+	options := parseFlags(trekState)
 
-	if trekState.showUI {
+	switch options.trekMode {
+	case NcursesMode:
 		showUI(trekState)
-	} else {
-		showCLI(trekState, jobID)
+	case OneOffMode:
+		showCLI(trekState, options.jobID)
+	case HelpMode:
+		usage()
+	default:
+		log.Panicf("trek: unknown mode %+v\n", options.trekMode)
 	}
 }

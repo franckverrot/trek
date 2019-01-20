@@ -22,13 +22,17 @@ Get to revisions, and download a binary.
 
 ## USAGE
 
+
+*TL;DR* Start `./trek -help` to get the usage prompt.
+
+
 ### CLI
 
     ./trek -ui=false <task name>
 
 ### ncurses UI
 
-    ./trek
+    ./trek -ui=true
 
 
 ### Trek Configuration File

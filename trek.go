@@ -517,7 +517,7 @@ func layout(trekState *trekStateType) layoutType {
 	}
 }
 
-func showUI(options trekOptions) {
+func runUI(options trekOptions) {
 	trekState := new(trekStateType)
 
 	// build ui
@@ -540,7 +540,7 @@ func showUI(options trekOptions) {
 	}
 }
 
-func showCLI(trekOptions trekOptions) {
+func runCommand(trekOptions trekOptions) {
 	var err error
 
 	trekState := new(trekStateType)

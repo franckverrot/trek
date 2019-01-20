@@ -7,9 +7,9 @@ func main() {
 
 	switch options.trekMode {
 	case NcursesMode:
-		showUI(options)
+		runUI(options)
 	case OneOffMode:
-		showCLI(options)
+		runCommand(options)
 	case HelpMode:
 		usage()
 	default:

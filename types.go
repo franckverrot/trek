@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"sort"
 
 	nomad "github.com/hashicorp/nomad/api"
 	"github.com/jroimartin/gocui"
@@ -94,6 +95,30 @@ func (trekState *trekStateType) Tasks() []*nomad.Task {
 }
 func (trekState *trekStateType) CurrentTask() *nomad.Task {
 	return trekState.Tasks()[trekState.selectedTask]
+}
+
+func (trekState *trekStateType) CurrentAllocations() []nomad.Allocation {
+	options := &nomad.QueryOptions{}
+	allocs := trekState.client.Allocations()
+	allocsListStub, _, _ := allocs.List(options)
+
+	trekState.foundAllocations = make([]nomad.Allocation, 0)
+
+	taskGroup := trekState.CurrentTaskGroup()
+
+	for _, stub := range allocsListStub {
+		alloc, _, err := allocs.Info(stub.ID, options)
+		if err != nil {
+			log.Panicln(err)
+		}
+		if alloc.TaskGroup == *taskGroup.Name {
+			if alloc.ClientStatus == "running" {
+				trekState.foundAllocations = append(trekState.foundAllocations, *alloc)
+			}
+		}
+	}
+	sort.SliceStable(trekState.foundAllocations, func(i, j int) bool { return trekState.foundAllocations[i].Name < trekState.foundAllocations[j].Name })
+	return trekState.foundAllocations
 }
 
 func (trekState *trekStateType) Jobs() []nomad.Job {

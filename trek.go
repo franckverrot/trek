@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"reflect"
-	"sort"
 	"strings"
 
 	nomad "github.com/hashicorp/nomad/api"
@@ -185,26 +184,7 @@ func selectTaskGroup(g *gocui.Gui, v *gocui.View, trekState *trekStateType) erro
 				view.Editable = false
 				view.Wrap = false
 
-				taskGroup := trekState.CurrentTaskGroup()
-
-				options := &nomad.QueryOptions{}
-				allocs := trekState.client.Allocations()
-				allocsListStub, _, _ := allocs.List(options)
-
-				for _, stub := range allocsListStub {
-					alloc, _, err := allocs.Info(stub.ID, options)
-					if err != nil {
-						log.Panicln(err)
-					}
-					if alloc.TaskGroup == *taskGroup.Name {
-						if alloc.ClientStatus == "running" {
-							trekState.foundAllocations = append(trekState.foundAllocations, *alloc)
-						}
-					}
-				}
-				sort.SliceStable(trekState.foundAllocations, func(i, j int) bool { return trekState.foundAllocations[i].Name < trekState.foundAllocations[j].Name })
-
-				for _, all := range trekState.foundAllocations {
+				for _, all := range trekState.CurrentAllocations() {
 					fmt.Fprintf(view, "%s\n", all.Name)
 				}
 
@@ -367,7 +347,6 @@ var bindings = []binding{
 	binding{panelName: "Allocations", key: gocui.KeyArrowLeft,
 		handler: deleteView("Allocations", "Task Groups", func(trekState *trekStateType) {
 			trekState.selectedAllocationIndex = 0
-			trekState.foundAllocations = make([]nomad.Allocation, 0)
 		})},
 	binding{panelName: "Allocations", key: gocui.KeyEnter, handler: selectAllocation},
 	binding{panelName: "Allocations", key: gocui.KeyArrowRight, handler: selectAllocation},
@@ -377,7 +356,7 @@ var bindings = []binding{
 				trekState.selectedAllocationIndex = position.y
 			},
 			func(trekState *trekStateType) int {
-				return len(trekState.foundAllocations)
+				return len(trekState.CurrentAllocations())
 			})},
 	binding{panelName: "Allocations", key: gocui.KeyArrowUp,
 		handler: cursorUp(func(trekState *trekStateType, position cursorPosition) {

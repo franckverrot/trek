@@ -79,7 +79,18 @@ func (trekState *trekStateType) CurrentTaskGroup() nomad.TaskGroup {
 	return *trekState.CurrentJob().TaskGroups[trekState.selectedAllocationGroup]
 }
 func (trekState *trekStateType) CurrentTasks() []*nomad.Task {
-	return trekState.CurrentJob().TaskGroups[trekState.selectedAllocationGroup].Tasks
+	return trekState.CurrentTaskGroup().Tasks
+}
+
+func (trekState *trekStateType) Jobs() []nomad.Job {
+	options := &nomad.QueryOptions{}
+	jobListStubs, _, _ := trekState.client.Jobs().List(options)
+	trekState.jobs = make([]nomad.Job, 0)
+	for _, job := range jobListStubs {
+		fullJob, _, _ := trekState.client.Jobs().Info(job.ID, options)
+		trekState.jobs = append(trekState.jobs, *fullJob)
+	}
+	return trekState.jobs
 }
 
 // used in CLI mode
@@ -205,13 +216,8 @@ func selectCluster(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error 
 					log.Panicln(err)
 				}
 
-				options := &nomad.QueryOptions{}
-				jobListStubs, _, _ := trekState.client.Jobs().List(options)
-				trekState.jobs = make([]nomad.Job, 0)
-				for _, job := range jobListStubs {
-					fullJob, _, _ := trekState.client.Jobs().Info(job.ID, options)
-					trekState.jobs = append(trekState.jobs, *fullJob)
-					fmt.Fprintf(view, "%s (%s)\n", *(fullJob.Name), *(fullJob.ID))
+				for _, job := range trekState.Jobs() {
+					fmt.Fprintf(view, "%s (%s)\n", *(job.Name), *(job.ID))
 				}
 
 				return nil
@@ -219,7 +225,7 @@ func selectCluster(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error 
 }
 
 func selectJob(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
-	if len(trekState.jobs) < 1 {
+	if len(trekState.Jobs()) < 1 {
 		return nil
 	}
 
@@ -304,14 +310,7 @@ func selectAllocation(g *gocui.Gui, v *gocui.View, trekState *trekStateType) err
 				view.Editable = false
 				view.Wrap = false
 
-				trekState.foundTasks = make([]nomad.Task, 0)
-
 				for _, task := range trekState.CurrentTasks() {
-					trekState.foundTasks = append(trekState.foundTasks, *task)
-				}
-				sort.SliceStable(trekState.foundTasks, func(i, j int) bool { return trekState.foundTasks[i].Name < trekState.foundTasks[j].Name })
-
-				for _, task := range trekState.foundTasks {
 					fmt.Fprintf(view, "%s\n", task.Name)
 				}
 
@@ -333,7 +332,7 @@ func selectTask(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 				view.Editable = false
 				view.Wrap = false
 
-				task := trekState.foundTasks[trekState.selectedTask]
+				task := trekState.CurrentTasks()[trekState.selectedTask]
 
 				currentAllocation := trekState.CurrentAllocation()
 				options := &nomad.QueryOptions{}
@@ -438,7 +437,7 @@ var bindings = []binding{
 		})},
 	binding{panelName: "Jobs", key: gocui.KeyArrowDown, handler: cursorDown(
 		func(trekState *trekStateType, position cursorPosition) { trekState.selectedJob = position.y },
-		func(trekState *trekStateType) int { return len(trekState.jobs) })},
+		func(trekState *trekStateType) int { return len(trekState.Jobs()) })},
 
 	binding{panelName: "Task Groups", key: gocui.KeyArrowLeft,
 		handler: deleteView("Task Groups", "Jobs", func(trekState *trekStateType) { trekState.selectedAllocationGroup = 0 })},
@@ -448,7 +447,7 @@ var bindings = []binding{
 		func(trekState *trekStateType, position cursorPosition) {
 			trekState.selectedAllocationGroup = position.y
 		},
-		func(trekState *trekStateType) int { return len(trekState.jobs[trekState.selectedJob].TaskGroups) })},
+		func(trekState *trekStateType) int { return len(trekState.CurrentJob().TaskGroups) })},
 	binding{panelName: "Task Groups", key: gocui.KeyArrowUp,
 		handler: cursorUp(func(trekState *trekStateType, position cursorPosition) {
 			trekState.selectedAllocationGroup = position.y
@@ -482,7 +481,7 @@ var bindings = []binding{
 		handler: cursorDown(
 			func(trekState *trekStateType, position cursorPosition) { trekState.selectedTask = position.y },
 			func(trekState *trekStateType) int {
-				return len(trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedAllocationGroup].Tasks)
+				return len(trekState.CurrentJob().TaskGroups[trekState.selectedAllocationGroup].Tasks)
 			})},
 	binding{panelName: "Tasks", key: gocui.KeyArrowUp,
 		handler: cursorUp(func(trekState *trekStateType, position cursorPosition) {

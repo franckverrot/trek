@@ -195,7 +195,7 @@ func createView(g *gocui.Gui, trekState *trekStateType, view trekView) error {
 func selectCluster(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 	return createView(g, trekState,
 		trekView{
-			name: "Jobs",
+			name:                    "Jobs",
 			foregroundAfterCreation: true,
 			panelNum:                1,
 			panelsTotal:             5,
@@ -231,7 +231,7 @@ func selectJob(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 
 	return createView(g, trekState,
 		trekView{
-			name: "Task Groups",
+			name:                    "Task Groups",
 			foregroundAfterCreation: true,
 			panelNum:                2,
 			panelsTotal:             5,
@@ -256,7 +256,7 @@ func selectJob(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 func selectTaskGroup(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 	return createView(g, trekState,
 		trekView{
-			name: "Allocations",
+			name:                    "Allocations",
 			foregroundAfterCreation: true,
 			panelNum:                3,
 			panelsTotal:             5,
@@ -298,7 +298,7 @@ func selectTaskGroup(g *gocui.Gui, v *gocui.View, trekState *trekStateType) erro
 func selectAllocation(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 	return createView(g, trekState,
 		trekView{
-			name: "Tasks",
+			name:                    "Tasks",
 			foregroundAfterCreation: true,
 			panelNum:                4,
 			panelsTotal:             5,
@@ -321,7 +321,7 @@ func selectAllocation(g *gocui.Gui, v *gocui.View, trekState *trekStateType) err
 func selectTask(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 	return createView(g, trekState,
 		trekView{
-			name: "Task",
+			name:                    "Task",
 			foregroundAfterCreation: true,
 			panelNum:                0,
 			panelsTotal:             1,
@@ -589,7 +589,7 @@ func layout(trekState *trekStateType) layoutType {
 		initialized = true
 		return createView(g, trekState,
 			trekView{
-				name: "Clusters",
+				name:                    "Clusters",
 				foregroundAfterCreation: true,
 				panelNum:                0,
 				panelsTotal:             5,

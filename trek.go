@@ -76,10 +76,10 @@ func (trekState *trekStateType) CurrentJob() nomad.Job {
 	return trekState.jobs[trekState.selectedJob]
 }
 func (trekState *trekStateType) CurrentTaskGroup() nomad.TaskGroup {
-	return *trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedAllocationGroup]
+	return *trekState.CurrentJob().TaskGroups[trekState.selectedAllocationGroup]
 }
 func (trekState *trekStateType) CurrentTasks() []*nomad.Task {
-	return trekState.jobs[trekState.selectedJob].TaskGroups[trekState.selectedAllocationGroup].Tasks
+	return trekState.CurrentJob().TaskGroups[trekState.selectedAllocationGroup].Tasks
 }
 
 // used in CLI mode

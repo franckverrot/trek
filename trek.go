@@ -547,7 +547,7 @@ func showUI(options trekOptions) {
 	}
 	defer g.Close()
 
-	g.Cursor = true
+	g.Cursor = false
 
 	g.SetManagerFunc(layout(trekState))
 

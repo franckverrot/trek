@@ -143,3 +143,17 @@ func (trekState *trekStateType) Connect() error {
 	}
 	return nil
 }
+
+type boundsType struct {
+	startX int
+	startY int
+	endX   int
+	endY   int
+}
+
+// binding is some binding
+type binding struct {
+	panelName string
+	key       gocui.Key
+	handler   uiHandlerWithStateType
+}

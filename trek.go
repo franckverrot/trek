@@ -6,15 +6,10 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"reflect"
-	"strings"
 
 	nomad "github.com/hashicorp/nomad/api"
 	"github.com/jroimartin/gocui"
 )
-
-// used in CLI mode
-var jobID string
 
 func stateify(handler uiHandlerWithStateType, trekState *trekStateType) uiHandlerType {
 	return func(g *gocui.Gui, v *gocui.View) error {
@@ -300,13 +295,6 @@ func deleteView(currentView string, newCurrentView string, handler deleteViewCal
 	}
 }
 
-// binding is some binding
-type binding struct {
-	panelName string
-	key       gocui.Key
-	handler   uiHandlerWithStateType
-}
-
 var bindings = []binding{
 	binding{panelName: "Clusters", key: gocui.KeyEnter, handler: selectCluster},
 	binding{panelName: "Clusters", key: gocui.KeyArrowRight, handler: selectCluster},
@@ -395,13 +383,6 @@ func keybindings(g *gocui.Gui, trekState *trekStateType) error {
 	}
 
 	return nil
-}
-
-type boundsType struct {
-	startX int
-	startY int
-	endX   int
-	endY   int
 }
 
 func getBounds(maxX int, maxY int, currentPanel int, totalPanels int, margin int) boundsType {
@@ -519,22 +500,9 @@ func layout(trekState *trekStateType) layoutType {
 	}
 }
 
-func checkValidFlag(flagName string, flagValue string, validValues map[string]bool) {
-	if !validValues[flagValue] {
-		usage()
-
-		keys := reflect.ValueOf(validValues).MapKeys()
-		strkeys := make([]string, len(keys))
-		for i := 0; i < len(keys); i++ {
-			strkeys[i] = keys[i].String()
-		}
-		fmt.Fprintf(os.Stderr, "\nbad value for %s, got %s, accepting: %s\n", flagName, flagValue, strings.Join(strkeys, ", "))
-		os.Exit(1)
-	}
-}
-func parseFlags(trekState *trekStateType) {
+func parseFlags(trekState *trekStateType, jobID *string) {
 	flag.BoolVar(&trekState.showUI, "ui", true, "whether to show the ncurses UI or not")
-	flag.StringVar(&jobID, "jobID", "", "jobID to get")
+	flag.StringVar(jobID, "jobID", "", "jobID to get")
 
 	flag.Parse()
 }
@@ -565,8 +533,9 @@ func showUI(trekState *trekStateType) {
 	}
 }
 
-func showCLI(trekState *trekStateType) {
+func showCLI(trekState *trekStateType, jobID string) {
 	var err error
+
 	trekState.client, err = nomad.NewClient(nomad.DefaultConfig())
 
 	if err != nil {
@@ -620,11 +589,12 @@ func main() {
 	//connect to nomad
 	trekState := new(trekStateType)
 
-	parseFlags(trekState)
+	var jobID string
+	parseFlags(trekState, &jobID)
 
 	if trekState.showUI {
 		showUI(trekState)
 	} else {
-		showCLI(trekState)
+		showCLI(trekState, jobID)
 	}
 }

@@ -533,7 +533,7 @@ func parseFlags() trekOptions {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: %s [inputfile]\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "usage: %s [options]\n", os.Args[0])
 	flag.PrintDefaults()
 }
 

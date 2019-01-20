@@ -14,85 +14,6 @@ import (
 	"github.com/jroimartin/gocui"
 )
 
-type configuration struct {
-	Environments *[]environment
-}
-
-type environment struct {
-	Name    string
-	Address string
-}
-
-func (config *configuration) addEnvironment(name string, address string) {
-	if config.Environments == nil {
-		config.Environments = new([]environment)
-	}
-	*config.Environments = append(*config.Environments, environment{Name: name, Address: address})
-}
-
-type cursorPosition struct {
-	x int
-	y int
-}
-
-type trekView struct {
-	name                    string
-	foregroundAfterCreation bool
-	panelNum                int
-	panelsTotal             int
-	margin                  int
-	handler                 viewHandlerCallback
-}
-
-type layoutType func(g *gocui.Gui) error
-type viewHandlerCallback func(view *gocui.View, trekState *trekStateType) error
-type deleteViewCallback func(trekState *trekStateType)
-type cursorCallback func(trekState *trekStateType, position cursorPosition)
-type numElementsComputerCallback func(trekState *trekStateType) int
-type uiHandlerType func(g *gocui.Gui, v *gocui.View) error
-type uiHandlerWithStateType func(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error
-
-type trekStateType struct {
-	selectedClusterIndex      int
-	selectedJob               int
-	selectedAllocationGroup   int
-	selectedAllocationIndex   int
-	foundAllocations          []nomad.Allocation
-	selectedTask              int
-	foundTasks                []nomad.Task
-	showUI                    bool
-	client                    *nomad.Client
-	jobs                      []nomad.Job
-	nomadConnectConfiguration configuration
-}
-
-func (trekState *trekStateType) CurrentEnvironment() environment {
-	return (*trekState.nomadConnectConfiguration.Environments)[trekState.selectedClusterIndex]
-}
-func (trekState *trekStateType) CurrentAllocation() nomad.Allocation {
-	return trekState.foundAllocations[trekState.selectedAllocationIndex]
-}
-func (trekState *trekStateType) CurrentJob() nomad.Job {
-	return trekState.jobs[trekState.selectedJob]
-}
-func (trekState *trekStateType) CurrentTaskGroup() nomad.TaskGroup {
-	return *trekState.CurrentJob().TaskGroups[trekState.selectedAllocationGroup]
-}
-func (trekState *trekStateType) CurrentTasks() []*nomad.Task {
-	return trekState.CurrentTaskGroup().Tasks
-}
-
-func (trekState *trekStateType) Jobs() []nomad.Job {
-	options := &nomad.QueryOptions{}
-	jobListStubs, _, _ := trekState.client.Jobs().List(options)
-	trekState.jobs = make([]nomad.Job, 0)
-	for _, job := range jobListStubs {
-		fullJob, _, _ := trekState.client.Jobs().Info(job.ID, options)
-		trekState.jobs = append(trekState.jobs, *fullJob)
-	}
-	return trekState.jobs
-}
-
 // used in CLI mode
 var jobID string
 
@@ -207,13 +128,9 @@ func selectCluster(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error 
 				view.Editable = false
 				view.Wrap = false
 
-				var err error
-				config := nomad.DefaultConfig()
-				config.Address = trekState.CurrentEnvironment().Address
-				trekState.client, err = nomad.NewClient(config)
-
-				if err != nil {
+				if err := trekState.Connect(); err != nil {
 					log.Panicln(err)
+					return nil
 				}
 
 				for _, job := range trekState.Jobs() {
@@ -310,7 +227,7 @@ func selectAllocation(g *gocui.Gui, v *gocui.View, trekState *trekStateType) err
 				view.Editable = false
 				view.Wrap = false
 
-				for _, task := range trekState.CurrentTasks() {
+				for _, task := range trekState.Tasks() {
 					fmt.Fprintf(view, "%s\n", task.Name)
 				}
 
@@ -332,19 +249,13 @@ func selectTask(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 				view.Editable = false
 				view.Wrap = false
 
-				task := trekState.CurrentTasks()[trekState.selectedTask]
+				task := trekState.CurrentTask()
 
 				currentAllocation := trekState.CurrentAllocation()
-				options := &nomad.QueryOptions{}
-				nodes := trekState.client.Nodes()
-				node, _, err := nodes.Info(currentAllocation.NodeID, options)
-				if err != nil {
-					log.Panicln(err)
-				}
-				ip := node.Attributes["unique.network.ip-address"]
-				taskResource := currentAllocation.TaskResources[task.Name]
+				ip := currentAllocation.Ip()
+				taskResource := currentAllocation.allocation.TaskResources[task.Name]
 				fmt.Fprintf(view, "* Name: %s\n", task.Name)
-				fmt.Fprintf(view, "* Node Name: %s\n", node.Name)
+				fmt.Fprintf(view, "* Node Name: %s\n", currentAllocation.node.Name)
 				fmt.Fprintf(view, "* Node IP: %s\n", ip)
 				fmt.Fprintf(view, "* Driver: %s\n", task.Driver)
 				for k, v := range task.Config {

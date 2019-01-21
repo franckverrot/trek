@@ -2,8 +2,11 @@ package main
 
 import (
 	"fmt"
+	"html/template"
 	"log"
 	"os"
+
+	"github.com/hashicorp/nomad/api"
 )
 
 func runCommand(trekOptions trekOptions) error {
@@ -91,7 +94,34 @@ func runCommand(trekOptions trekOptions) error {
 								}
 							} else {
 								// Show task details
-								trekState.FprintCurrentTask(os.Stdout)
+								if trekOptions.displayFormat == "" {
+									trekState.FprintCurrentTask(os.Stdout)
+								} else {
+									alloc := trekState.CurrentAllocation()
+									task := trekState.CurrentTask()
+
+									provider := taskFormatProvider{
+										IP:          alloc.IP(),
+										Network:     buildNetwork(alloc.allocation.TaskResources[task.Name].Networks),
+										Environment: buildEnv(task.Env),
+									}
+									tmpl, err := template.
+										New("output").
+										Funcs(template.FuncMap{
+											"Debug":    func(structure interface{}) string { return fmt.Sprintf("DEBUG: %+v\n", structure) },
+											"DebugAll": func() string { return fmt.Sprintf("DEBUG ALL: %+v\n", provider) },
+										}).
+										Parse(trekOptions.displayFormat)
+
+									if err != nil {
+										panic(err)
+									}
+									err = tmpl.Execute(os.Stdout, provider)
+									if err != nil {
+										panic(err)
+									}
+									fmt.Println()
+								}
 							}
 
 						}
@@ -100,24 +130,35 @@ func runCommand(trekOptions trekOptions) error {
 				}
 			}
 		}
-		// for _, foundAllocation := range foundAllocations {
-		// 	node, _, err := nodes.Info(foundAllocation.NodeID, nomadOptions)
-		// 	ip := node.Attributes["unique.network.ip-address"]
-		// 	if err != nil {
-		// 		log.Panicln(err)
-		// 	}
-		// 	fmt.Printf("%s (%s)\n", foundAllocation.Name, foundAllocation.ID)
-		// 	for _, taskResource := range foundAllocation.TaskResources {
-		// 		for _, network := range taskResource.Networks {
-		// 			for _, dynPort := range network.DynamicPorts {
-		// 				fmt.Printf("\t%s => %s:%d\n", dynPort.Label, ip, dynPort.Value)
-		// 			}
-		// 		}
-		// 	}
 
 	default:
 		fmt.Printf("Unknown mode: %s.  Exiting.\n", trekOptions.trekMode)
 		os.Exit(1)
 	}
 	return nil
+}
+
+func buildNetwork(networks []*api.NetworkResource) trekCommandNetwork {
+	network := trekCommandNetwork{}
+	network.Ports = map[string]trekCommandPort{}
+
+	if len(networks) > 1 {
+		log.Panicf("Found more than one network.  Exiting...")
+	}
+	for _, reservedPort := range networks[0].ReservedPorts {
+		network.Ports[reservedPort.Label] = trekCommandPort{Value: reservedPort.Value, Reserved: true}
+	}
+	for _, dynPort := range networks[0].DynamicPorts {
+		network.Ports[dynPort.Label] = trekCommandPort{Value: dynPort.Value, Reserved: false}
+	}
+
+	return network
+}
+
+func buildEnv(env map[string]string) trekCommandEnvironment {
+	resultingEnv := trekCommandEnvironment{}
+	for key, value := range env {
+		resultingEnv[key] = trekCommandEnvironmentVariable{Value: value}
+	}
+	return resultingEnv
 }

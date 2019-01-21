@@ -710,6 +710,7 @@ job "example34" {
         image = "redis:3.2"
         port_map {
           db = 6379
+          other_port = 1234
         }
       }
 
@@ -762,6 +763,7 @@ job "example34" {
         network {
           mbits = 10
           port "db" {}
+          port "other_port" {}
         }
       }
 

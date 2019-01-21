@@ -172,3 +172,24 @@ type binding struct {
 	key       gocui.Key
 	handler   uiHandlerWithStateType
 }
+
+type taskFormatProvider struct {
+	IP          string
+	Network     trekCommandNetwork
+	Environment trekCommandEnvironment
+}
+
+type trekCommandNetwork struct {
+	Ports map[string]trekCommandPort
+}
+
+type trekCommandPort struct {
+	Value    int
+	Reserved bool // if not reserved? it's dynamic
+}
+
+type trekCommandEnvironment map[string]trekCommandEnvironmentVariable
+
+type trekCommandEnvironmentVariable struct {
+	Value string
+}

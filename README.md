@@ -28,31 +28,88 @@ Get to revisions, and download a binary.
 
 ### CLI
 
-Here's how to use it:
+The CLI can be used without a UI. This allows scripting to access IP, ports,
+and other info exposed by Nomad.
 
-    λ ./trek -list-jobs
-    * example
-    * example34
+#### Options
 
-    λ trek -job example34
-    * cache34
-    * cache56
+Here's a list of options available:
 
-    λ trek -job example34 -task-group cache56
-    * example34.cache56[0]
+<a name="nomad-address"></a>
+* `nomad-address`: address of the nomad cluster
 
-    λ trek -job example34 -task-group cache56 -allocation 0
-    (0) redis5
-    (1) redis6
+<a name="list-jobs"></a>
+* `list-jobs`: list jobs running on the cluster
 
-    λ trek -job example34 -task-group cache56 -allocation 0 -task-name redis6
-    * Name: redis6
-    * Node Name: feynman.local
-    * Node IP: 127.0.0.1
-    * Driver: docker
-            * image: redis:3.2
-            * port_map: [map[db:6379]]
-    * Dynamic Ports: 24832 (db)
+```
+λ ./trek -list-jobs
+* example
+* example34
+```
+
+<a name="job"></a>
+* `job`: select a specific job
+
+```
+λ trek -job example34
+* cache34
+* cache56
+```
+
+<a name="task-group"></a>
+* `task-group`: select a specific task group
+
+```
+λ trek -job example34 -task-group cache56
+* example34.cache56[0]
+```
+
+<a name="allocation"></a>
+* `allocation`: select a specific allocation number
+
+```
+λ trek -job example34 -task-group cache56 -allocation 0
+(0) redis5
+(1) redis6
+```
+
+<a name="task-name"></a>
+* `task-name`: select a specific task name
+
+```
+λ trek -job example34 -task-group cache56 -allocation 0 -task-name redis6
+* Name: redis6
+* Node Name: feynman.local
+* Node IP: 127.0.0.1
+* Driver: docker
+        * image: redis:3.2
+        * port_map: [map[db:6379]]
+* Dynamic Ports: 24832 (db)
+```
+
+<a name="display-format"></a>
+* `display-format`: Use the [Go templating language][go-templating] to format output when describing a specific task
+  * Available data:
+    * `IP`: no onto which we're running the selected task
+    * `Network`: network information (like ports)
+    * `Environment`: environment variables provided to the task
+  * Available functions:
+    * `{{Debug <x>}}` : show raw representation of the data `<x>`
+    * `{{DebugAll}}` : show raw representation of everything provided to the template
+  * Examples:
+
+```
+λ trek -job example34 -task-group cache56 -allocation 0 -task-name redis6 -display-format "{{DebugAll}}"
+DEBUG ALL: {IP:127.0.0.1 Network:{Ports:map[db:{Value:23109 Reserved:false}]} Environment:map[FOO_BAR:{Value:baz_bat}]}
+
+λ trek -job example34 -task-group cache56 -allocation 0 -task-name redis6 -display-format "{{Debug .Environment}}"
+DEBUG: map[FOO_BAR:{Value:baz_bat}]
+
+λ trek -job example34 -task-group cache56 -allocation 0 -task redis6 -display-format "{{range .Network.Ports}}{{$.IP}}:{{.Value}}{{println}}{{end}}"
+127.0.0.1:31478
+127.0.0.1:25142
+```
+
 
 
 ### ncurses UI
@@ -96,3 +153,6 @@ Here's how to use it:
 ## Copyright
 
 Copyright (c) 2019 Franck Verrot. MIT LICENSE. See LICENSE for details.
+
+
+[go-templating]: https://golang.org/pkg/text/template/

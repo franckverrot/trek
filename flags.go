@@ -30,6 +30,7 @@ type trekOptions struct {
 	taskGroup       string
 	allocationIndex int
 	taskName        string
+	displayFormat   string
 }
 
 type cliOptions struct {
@@ -41,6 +42,7 @@ type cliOptions struct {
 	taskGroup       string
 	allocationIndex int
 	taskName        string
+	displayFormat   string
 }
 
 func (options *cliOptions) DetermineMode() UIMode {
@@ -71,6 +73,7 @@ func parseFlags() trekOptions {
 	flag.StringVar(&(*options).taskGroup, "task-group", "", "task group to get (only used when running in non-ui mode)")
 	flag.IntVar(&(*options).allocationIndex, "allocation", -1, "allocation index to get (starts at 0, only used when running in non-ui mode)")
 	flag.StringVar(&(*options).taskName, "task", "", "task name to get (only used when running in non-ui mode)")
+	flag.StringVar(&(*options).displayFormat, "display-format", "", "task display format")
 
 	flag.Parse()
 
@@ -81,6 +84,7 @@ func parseFlags() trekOptions {
 		taskGroup:       (*options).taskGroup,
 		allocationIndex: (*options).allocationIndex,
 		taskName:        (*options).taskName,
+		displayFormat:   (*options).displayFormat,
 	}
 }
 

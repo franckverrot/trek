@@ -28,7 +28,32 @@ Get to revisions, and download a binary.
 
 ### CLI
 
-    ./trek -ui=false <task name>
+Here's how to use it:
+
+    λ ./trek -list-jobs
+    * example
+    * example34
+
+    λ trek -job example34
+    * cache34
+    * cache56
+
+    λ trek -job example34 -task-group cache56
+    * example34.cache56[0]
+
+    λ trek -job example34 -task-group cache56 -allocation 0
+    (0) redis5
+    (1) redis6
+
+    λ trek -job example34 -task-group cache56 -allocation 0 -task-name redis6
+    * Name: redis6
+    * Node Name: feynman.local
+    * Node IP: 127.0.0.1
+    * Driver: docker
+            * image: redis:3.2
+            * port_map: [map[db:6379]]
+    * Dynamic Ports: 24832 (db)
+
 
 ### ncurses UI
 

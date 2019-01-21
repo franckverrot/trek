@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 
@@ -155,9 +156,7 @@ func selectJob(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 				view.Editable = false
 				view.Wrap = false
 
-				job := trekState.CurrentJob()
-
-				for _, taskGroup := range job.TaskGroups {
+				for _, taskGroup := range trekState.CurrentTaskGroups() {
 					fmt.Fprintf(view, "%s (%d)\n", *(taskGroup.Name), *(taskGroup.Count))
 				}
 
@@ -234,47 +233,7 @@ func selectTask(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 				view.Editable = false
 				view.Wrap = false
 
-				task := trekState.CurrentTask()
-
-				currentAllocation := trekState.CurrentAllocation()
-				ip := currentAllocation.IP()
-				taskResource := currentAllocation.allocation.TaskResources[task.Name]
-				fmt.Fprintf(view, "* Name: %s\n", task.Name)
-				fmt.Fprintf(view, "* Node Name: %s\n", currentAllocation.node.Name)
-				fmt.Fprintf(view, "* Node IP: %s\n", ip)
-				fmt.Fprintf(view, "* Driver: %s\n", task.Driver)
-				for k, v := range task.Config {
-					fmt.Fprintf(view, "\t* %s: %+v\n", k, v)
-				}
-				if len(task.Env) > 0 {
-					fmt.Fprintf(view, "* Env:\n")
-					for k, v := range task.Env {
-						fmt.Fprintf(view, "\t* %s: %s\n", k, v)
-					}
-				}
-				for _, network := range taskResource.Networks {
-					if len(network.DynamicPorts) > 0 {
-
-						fmt.Fprintf(view, "* Dynamic Ports: ")
-						for idx, dynPort := range network.DynamicPorts {
-							if idx > 0 {
-								fmt.Fprintf(view, ", ")
-							}
-							fmt.Fprintf(view, "%d (%s)", dynPort.Value, dynPort.Label)
-						}
-						fmt.Fprintf(view, "\n")
-					}
-					if len(network.ReservedPorts) > 0 {
-						fmt.Fprintf(view, "* Reserved Ports: ")
-						for idx, dynPort := range network.ReservedPorts {
-							if idx > 0 {
-								fmt.Fprintf(view, ", ")
-							}
-							fmt.Fprintf(view, "%d (%s)", dynPort.Value, dynPort.Label)
-						}
-						fmt.Fprintf(view, "\n")
-					}
-				}
+				trekState.FprintCurrentTask(view)
 				// if(trekState.debugModeEnabled) {
 				// val := reflect.Indirect(reflect.ValueOf(task))
 				// valType := val.Type()
@@ -293,6 +252,50 @@ func selectTask(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 		},
 		trekState,
 	)
+}
+
+func (trekState *trekStateType) FprintCurrentTask(writer io.Writer) {
+	task := trekState.CurrentTask()
+
+	currentAllocation := trekState.CurrentAllocation()
+	ip := currentAllocation.IP()
+	taskResource := currentAllocation.allocation.TaskResources[task.Name]
+	fmt.Fprintf(writer, "* Name: %s\n", task.Name)
+	fmt.Fprintf(writer, "* Node Name: %s\n", currentAllocation.node.Name)
+	fmt.Fprintf(writer, "* Node IP: %s\n", ip)
+	fmt.Fprintf(writer, "* Driver: %s\n", task.Driver)
+	for k, v := range task.Config {
+		fmt.Fprintf(writer, "\t* %s: %+v\n", k, v)
+	}
+	if len(task.Env) > 0 {
+		fmt.Fprintf(writer, "* Env:\n")
+		for k, v := range task.Env {
+			fmt.Fprintf(writer, "\t* %s: %s\n", k, v)
+		}
+	}
+	for _, network := range taskResource.Networks {
+		if len(network.DynamicPorts) > 0 {
+
+			fmt.Fprintf(writer, "* Dynamic Ports: ")
+			for idx, dynPort := range network.DynamicPorts {
+				if idx > 0 {
+					fmt.Fprintf(writer, ", ")
+				}
+				fmt.Fprintf(writer, "%d (%s)", dynPort.Value, dynPort.Label)
+			}
+			fmt.Fprintf(writer, "\n")
+		}
+		if len(network.ReservedPorts) > 0 {
+			fmt.Fprintf(writer, "* Reserved Ports: ")
+			for idx, dynPort := range network.ReservedPorts {
+				if idx > 0 {
+					fmt.Fprintf(writer, ", ")
+				}
+				fmt.Fprintf(writer, "%d (%s)", dynPort.Value, dynPort.Label)
+			}
+			fmt.Fprintf(writer, "\n")
+		}
+	}
 }
 
 func deleteView(currentView string, newCurrentView string, handler deleteViewCallback) uiHandlerWithStateType {
@@ -339,7 +342,7 @@ var bindings = []binding{
 		func(trekState *trekStateType, position cursorPosition) {
 			trekState.selectedAllocationGroup = position.y
 		},
-		func(trekState *trekStateType) int { return len(trekState.CurrentJob().TaskGroups) })},
+		func(trekState *trekStateType) int { return len(trekState.CurrentTaskGroups()) })},
 	binding{panelName: "Task Groups", key: gocui.KeyArrowUp,
 		handler: cursorUp(func(trekState *trekStateType, position cursorPosition) {
 			trekState.selectedAllocationGroup = position.y
@@ -372,7 +375,7 @@ var bindings = []binding{
 		handler: cursorDown(
 			func(trekState *trekStateType, position cursorPosition) { trekState.selectedTask = position.y },
 			func(trekState *trekStateType) int {
-				return len(trekState.CurrentJob().TaskGroups[trekState.selectedAllocationGroup].Tasks)
+				return len(trekState.CurrentTaskGroups()[trekState.selectedAllocationGroup].Tasks)
 			})},
 	binding{panelName: "Tasks", key: gocui.KeyArrowUp,
 		handler: cursorUp(func(trekState *trekStateType, position cursorPosition) {

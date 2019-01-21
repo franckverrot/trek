@@ -13,22 +13,34 @@ const (
 	// NcursesMode is used when we're using ncurses
 	NcursesMode UIMode = "ui"
 
-	// OneOffMode is used for one off commands
-	OneOffMode UIMode = "no-ui"
+	// JobMode is used for one off commands
+	JobMode UIMode = "job"
 
 	// HelpMode is used when we show the help
 	HelpMode UIMode = "help"
+
+	// ListJobsMode is used to list jobs
+	ListJobsMode UIMode = "list-jobs"
 )
 
 type trekOptions struct {
-	jobID    string
-	trekMode UIMode
+	nomadAddress    string
+	trekMode        UIMode
+	jobID           string
+	taskGroup       string
+	allocationIndex int
+	taskName        string
 }
 
 type cliOptions struct {
-	jobID   string
-	help    bool
-	ncurses bool
+	nomadAddress    string
+	help            bool
+	ncurses         bool
+	listJobs        bool
+	job             string
+	taskGroup       string
+	allocationIndex int
+	taskName        string
 }
 
 func (options *cliOptions) DetermineMode() UIMode {
@@ -39,8 +51,10 @@ func (options *cliOptions) DetermineMode() UIMode {
 	} else {
 		if options.ncurses {
 			actualMode = NcursesMode
-		} else if options.jobID != "" {
-			actualMode = OneOffMode
+		} else if options.listJobs {
+			actualMode = ListJobsMode
+		} else if options.job != "" {
+			actualMode = JobMode
 		}
 	}
 
@@ -50,14 +64,23 @@ func (options *cliOptions) DetermineMode() UIMode {
 func parseFlags() trekOptions {
 	options := new(cliOptions)
 	flag.BoolVar(&(*options).help, "help", false, "show usage prompt")
+	flag.StringVar(&(*options).nomadAddress, "nomad-address", "http://localhost:4646", "nomad cluster address")
 	flag.BoolVar(&(*options).ncurses, "ui", false, "use UI mode")
-	flag.StringVar(&(*options).jobID, "jobID", "", "jobID to get (only used when running in non-ui mode)")
+	flag.BoolVar(&(*options).listJobs, "list-jobs", false, "list jobs")
+	flag.StringVar(&(*options).job, "job", "", "job name to get (only used when running in non-ui mode)")
+	flag.StringVar(&(*options).taskGroup, "task-group", "", "task group to get (only used when running in non-ui mode)")
+	flag.IntVar(&(*options).allocationIndex, "allocation", -1, "allocation index to get (starts at 0, only used when running in non-ui mode)")
+	flag.StringVar(&(*options).taskName, "task", "", "task name to get (only used when running in non-ui mode)")
 
 	flag.Parse()
 
 	return trekOptions{
-		jobID:    (*options).jobID,
-		trekMode: (*options).DetermineMode(),
+		nomadAddress:    (*options).nomadAddress,
+		trekMode:        (*options).DetermineMode(),
+		jobID:           (*options).job,
+		taskGroup:       (*options).taskGroup,
+		allocationIndex: (*options).allocationIndex,
+		taskName:        (*options).taskName,
 	}
 }
 

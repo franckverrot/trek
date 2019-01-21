@@ -4,6 +4,7 @@ import (
 	"log"
 	"sort"
 
+	"github.com/hashicorp/nomad/api"
 	nomad "github.com/hashicorp/nomad/api"
 	"github.com/jroimartin/gocui"
 )
@@ -72,8 +73,7 @@ func (alloc allocation) IP() string {
 	return alloc.node.Attributes["unique.network.ip-address"]
 }
 
-func (trekState *trekStateType) CurrentAllocation() allocation {
-	alloc := trekState.foundAllocations[trekState.selectedAllocationIndex]
+func (trekState *trekStateType) getNodeFromAllocation(alloc nomad.Allocation) api.Node {
 	options := &nomad.QueryOptions{}
 	nodes := trekState.client.Nodes()
 	node, _, err := nodes.Info(alloc.NodeID, options)
@@ -81,11 +81,22 @@ func (trekState *trekStateType) CurrentAllocation() allocation {
 	if err != nil {
 		log.Panicln(err)
 	}
-	return allocation{allocation: alloc, node: *node}
+	return *node
+}
+
+func (trekState *trekStateType) CurrentAllocation() allocation {
+	index := trekState.selectedAllocationIndex
+	alloc := trekState.foundAllocations[index]
+	node := trekState.getNodeFromAllocation(alloc)
+	return allocation{allocation: alloc, node: node}
 }
 func (trekState *trekStateType) CurrentJob() nomad.Job {
 	return trekState.jobs[trekState.selectedJob]
 }
+func (trekState *trekStateType) CurrentTaskGroups() []*nomad.TaskGroup {
+	return trekState.CurrentJob().TaskGroups
+}
+
 func (trekState *trekStateType) CurrentTaskGroup() nomad.TaskGroup {
 	return *trekState.CurrentJob().TaskGroups[trekState.selectedAllocationGroup]
 }
@@ -122,7 +133,12 @@ func (trekState *trekStateType) CurrentAllocations() []nomad.Allocation {
 
 func (trekState *trekStateType) Jobs() []nomad.Job {
 	options := &nomad.QueryOptions{}
-	jobListStubs, _, _ := trekState.client.Jobs().List(options)
+	jobListStubs, _, err := trekState.client.Jobs().List(options)
+
+	if err != nil {
+		log.Panicln(err)
+	}
+
 	trekState.jobs = make([]nomad.Job, 0)
 	for _, job := range jobListStubs {
 		fullJob, _, _ := trekState.client.Jobs().Info(job.ID, options)

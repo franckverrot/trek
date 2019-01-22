@@ -90,6 +90,8 @@ Here's a list of options available:
 <a name="display-format"></a>
 * `display-format`: Use the [Go templating language][go-templating] to format output when describing a specific allocation or task
   * Context-specific data made available:
+    * Task Group
+      * `Allocations` (array of allocations): allocations run by that task group
     * Allocation
       * `IP` (string): node onto which we're running the selected allocation
       * `Tasks` (array of tasks): tasks being run by that allocation

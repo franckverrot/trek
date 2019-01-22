@@ -225,3 +225,11 @@ type allocationFormatProvider struct {
 type trekTask struct {
 	Name string
 }
+
+type taskGroupFormatProvider struct {
+	Allocations []trekAllocation
+}
+
+type trekAllocation struct {
+	Name string
+}

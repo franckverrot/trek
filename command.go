@@ -57,9 +57,17 @@ func runCommand(trekOptions trekOptions) error {
 			} else {
 				// No allocation provided by the user, display all of them
 				if trekOptions.allocationIndex == -1 {
-					// Show task group's allocation
-					for index, alloc := range trekState.CurrentAllocations() {
-						fmt.Printf("(%d) %s\n", index, alloc.Name)
+					if trekOptions.displayFormat == "" {
+						// Show all selected task group's allocation
+						for index, alloc := range trekState.CurrentAllocations() {
+							fmt.Printf("(%d) %s\n", index, alloc.Name)
+						}
+					} else {
+						// use the formatter
+						provider := taskGroupFormatProvider{
+							Allocations: buildAllocations(trekState.CurrentAllocations()),
+						}
+						trekPrintDetails(os.Stdout, trekOptions.displayFormat, provider)
 					}
 				} else {
 					trekState.selectedAllocationIndex = trekOptions.allocationIndex
@@ -161,6 +169,16 @@ func buildTasks(tasks []*nomad.Task) []trekTask {
 
 	for _, task := range tasks {
 		result = append(result, trekTask{Name: task.Name})
+	}
+
+	return result
+}
+
+func buildAllocations(allocs []nomad.Allocation) []trekAllocation {
+	result := make([]trekAllocation, 0)
+
+	for _, alloc := range allocs {
+		result = append(result, trekAllocation{Name: alloc.Name})
 	}
 
 	return result

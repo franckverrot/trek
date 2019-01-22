@@ -47,6 +47,9 @@ Here's a list of options available:
 * example34
 ```
 
+*NOTE* : this option also works in conjunction with [`display-format`](#display-format)
+
+
 <a name="job"></a>
 * `job`: select a specific job
 

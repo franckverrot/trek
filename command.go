@@ -22,8 +22,17 @@ func runCommand(trekOptions trekOptions) error {
 
 	switch trekOptions.trekMode {
 	case ListJobsMode:
-		for _, job := range trekState.Jobs() {
-			fmt.Printf("* %s\n", *job.Name)
+
+		if trekOptions.displayFormat == "" {
+			for _, job := range trekState.Jobs() {
+				fmt.Printf("* %s\n", *job.Name)
+			}
+		} else {
+			// use the formatter
+			provider := jobsFormatProvider{
+				Jobs: buildJobs(trekState.Jobs()),
+			}
+			trekPrintDetails(os.Stdout, trekOptions.displayFormat, provider)
 		}
 
 	case JobMode:
@@ -197,6 +206,16 @@ func buildTaskGroups(tgs []*nomad.TaskGroup) []trekTaskGroup {
 
 	for _, taskGroup := range tgs {
 		result = append(result, trekTaskGroup{Name: *taskGroup.Name})
+	}
+
+	return result
+}
+
+func buildJobs(jobs []nomad.Job) []trekJob {
+	result := make([]trekJob, 0)
+
+	for _, job := range jobs {
+		result = append(result, trekJob{Name: *job.Name})
 	}
 
 	return result

@@ -241,3 +241,11 @@ type jobFormatProvider struct {
 type trekTaskGroup struct {
 	Name string
 }
+
+type jobsFormatProvider struct {
+	Jobs []trekJob
+}
+
+type trekJob struct {
+	Name string
+}

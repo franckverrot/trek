@@ -216,3 +216,12 @@ func trekPrintDetails(w io.Writer, format string, data interface{}) {
 		panic(err)
 	}
 }
+
+type allocationFormatProvider struct {
+	IP    string
+	Tasks []trekTask
+}
+
+type trekTask struct {
+	Name string
+}

@@ -88,11 +88,15 @@ Here's a list of options available:
 ```
 
 <a name="display-format"></a>
-* `display-format`: Use the [Go templating language][go-templating] to format output when describing a specific task
-  * Available data:
-    * `IP`: no onto which we're running the selected task
-    * `Network`: network information (like ports)
-    * `Environment`: environment variables provided to the task
+* `display-format`: Use the [Go templating language][go-templating] to format output when describing a specific allocation or task
+  * Context-specific data made available:
+    * Allocation
+      * `IP` (string): node onto which we're running the selected allocation
+      * `Tasks` (array of tasks): tasks being run by that allocation
+    * Task
+      * `IP` (string): node onto which we're running the selected task
+      * `Network`: network information (like ports)
+      * `Environment`: environment variables provided to the task
   * Available functions:
     * `{{Debug <x>}}` : show raw representation of the data `<x>`
     * `{{DebugAll}}` : show raw representation of everything provided to the template
@@ -132,12 +136,11 @@ DEBUG: map[FOO_BAR:{Value:baz_bat}]
   * `Environments`: List of environments (given a name and address) Trek can connect to
 
 
+## FAQ
 
-## Todo
+* How do I ssh into an allocation's node?
 
-* [ ] Make it easy to SSH into a node
-* [ ] Better UI
-* [ ] More options
+    λ ssh $(trek -job ... -task-group ... -allocation 0  -display-format "{{.IP}}")
 
 
 ## Note on Patches/Pull Requests

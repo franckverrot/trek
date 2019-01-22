@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/hashicorp/nomad/api"
+	nomad "github.com/hashicorp/nomad/api"
 )
 
 func runCommand(trekOptions trekOptions) error {
@@ -70,10 +71,20 @@ func runCommand(trekOptions trekOptions) error {
 						}
 					} else {
 						//////////////////
-						// No task provided by user, display all of them
+						// Allocation found, no task provided by user
 						if trekOptions.taskName == "" {
-							for _, task := range trekState.Tasks() {
-								fmt.Printf("* %s\n", task.Name)
+							if trekOptions.displayFormat == "" {
+								// display all of them
+								for _, task := range trekState.Tasks() {
+									fmt.Printf("* %s\n", task.Name)
+								}
+							} else {
+								// use the formatter
+								provider := allocationFormatProvider{
+									IP:    trekState.CurrentAllocation().IP(),
+									Tasks: buildTasks(trekState.Tasks()),
+								}
+								trekPrintDetails(os.Stdout, trekOptions.displayFormat, provider)
 							}
 						} else {
 
@@ -143,4 +154,14 @@ func buildEnv(env map[string]string) trekCommandEnvironment {
 		resultingEnv[key] = trekCommandEnvironmentVariable{Value: value}
 	}
 	return resultingEnv
+}
+
+func buildTasks(tasks []*nomad.Task) []trekTask {
+	result := make([]trekTask, 0)
+
+	for _, task := range tasks {
+		result = append(result, trekTask{Name: task.Name})
+	}
+
+	return result
 }

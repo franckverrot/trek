@@ -1,8 +1,6 @@
 # Trek
 
-(*Alpha version of a CLI/ncurses explorer for Nomad clusters.*)
-
-Trek is an interface to explore Nomad clusters.
+Trek is a CLI/ncurses explorer for [HashiCorp Nomad][nomad-url] clusters.
 
 ![In Action](https://raw.githubusercontent.com/franckverrot/trek/master/assets/jan-15-screenshot.png)
 
@@ -166,3 +164,4 @@ Copyright (c) 2019 Franck Verrot. MIT LICENSE. See LICENSE for details.
 
 
 [go-templating]: https://golang.org/pkg/text/template/
+[nomad-url]: https://www.nomadproject.io/

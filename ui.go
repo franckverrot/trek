@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"os"
 
@@ -233,7 +232,16 @@ func selectTask(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 				view.Editable = false
 				view.Wrap = false
 
-				trekState.FprintCurrentTask(view)
+				alloc := trekState.CurrentAllocation()
+				task := trekState.CurrentTask()
+
+				provider := taskFormatProvider{
+					Task:        trekTask{Name: task.Name, Driver: task.Driver, Config: task.Config},
+					Node:        trekNode{Name: alloc.node.Name, IP: alloc.IP()},
+					Network:     buildNetwork(alloc.allocation.TaskResources[task.Name].Networks),
+					Environment: buildEnv(task.Env),
+				}
+				trekPrintDetails(view, taskDetailsFormat, provider)
 				// if(trekState.debugModeEnabled) {
 				// val := reflect.Indirect(reflect.ValueOf(task))
 				// valType := val.Type()
@@ -252,50 +260,6 @@ func selectTask(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 		},
 		trekState,
 	)
-}
-
-func (trekState *trekStateType) FprintCurrentTask(writer io.Writer) {
-	task := trekState.CurrentTask()
-
-	currentAllocation := trekState.CurrentAllocation()
-	ip := currentAllocation.IP()
-	taskResource := currentAllocation.allocation.TaskResources[task.Name]
-	fmt.Fprintf(writer, "* Name: %s\n", task.Name)
-	fmt.Fprintf(writer, "* Node Name: %s\n", currentAllocation.node.Name)
-	fmt.Fprintf(writer, "* Node IP: %s\n", ip)
-	fmt.Fprintf(writer, "* Driver: %s\n", task.Driver)
-	for k, v := range task.Config {
-		fmt.Fprintf(writer, "\t* %s: %+v\n", k, v)
-	}
-	if len(task.Env) > 0 {
-		fmt.Fprintf(writer, "* Env:\n")
-		for k, v := range task.Env {
-			fmt.Fprintf(writer, "\t* %s: %s\n", k, v)
-		}
-	}
-	for _, network := range taskResource.Networks {
-		if len(network.DynamicPorts) > 0 {
-
-			fmt.Fprintf(writer, "* Dynamic Ports: ")
-			for idx, dynPort := range network.DynamicPorts {
-				if idx > 0 {
-					fmt.Fprintf(writer, ", ")
-				}
-				fmt.Fprintf(writer, "%d (%s)", dynPort.Value, dynPort.Label)
-			}
-			fmt.Fprintf(writer, "\n")
-		}
-		if len(network.ReservedPorts) > 0 {
-			fmt.Fprintf(writer, "* Reserved Ports: ")
-			for idx, dynPort := range network.ReservedPorts {
-				if idx > 0 {
-					fmt.Fprintf(writer, ", ")
-				}
-				fmt.Fprintf(writer, "%d (%s)", dynPort.Value, dynPort.Label)
-			}
-			fmt.Fprintf(writer, "\n")
-		}
-	}
 }
 
 func deleteView(currentView string, newCurrentView string, handler deleteViewCallback) uiHandlerWithStateType {

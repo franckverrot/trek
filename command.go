@@ -4,9 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-
-	"github.com/hashicorp/nomad/api"
-	nomad "github.com/hashicorp/nomad/api"
 )
 
 func runCommand(trekOptions trekOptions) error {
@@ -24,16 +21,13 @@ func runCommand(trekOptions trekOptions) error {
 	case ListJobsMode:
 
 		if trekOptions.displayFormat == "" {
-			for _, job := range trekState.Jobs() {
-				fmt.Printf("* %s\n", *job.Name)
-			}
-		} else {
-			// use the formatter
-			provider := jobsFormatProvider{
-				Jobs: buildJobs(trekState.Jobs()),
-			}
-			trekPrintDetails(os.Stdout, trekOptions.displayFormat, provider)
+			trekOptions.displayFormat = jobsListFormat
 		}
+
+		provider := jobsFormatProvider{
+			Jobs: buildJobs(trekState.Jobs()),
+		}
+		trekPrintDetails(os.Stdout, trekOptions.displayFormat, provider)
 
 	case JobMode:
 
@@ -44,18 +38,15 @@ func runCommand(trekOptions trekOptions) error {
 		}
 
 		if trekOptions.taskGroup == "" {
+
 			if trekOptions.displayFormat == "" {
-				// If no task group provided by the user, display the available ones
-				for _, tg := range trekState.CurrentTaskGroups() {
-					fmt.Printf("* %s?\n", *tg.Name)
-				}
-			} else {
-				// use the formatter
-				provider := jobFormatProvider{
-					TaskGroups: buildTaskGroups(trekState.CurrentTaskGroups()),
-				}
-				trekPrintDetails(os.Stdout, trekOptions.displayFormat, provider)
+				trekOptions.displayFormat = taskGroupsListFormat
 			}
+			provider := jobFormatProvider{
+				TaskGroups: buildTaskGroups(trekState.CurrentTaskGroups()),
+			}
+			trekPrintDetails(os.Stdout, trekOptions.displayFormat, provider)
+
 		} else {
 			// Find task group provided by the user
 			trekState.selectedAllocationGroup = -1
@@ -64,53 +55,54 @@ func runCommand(trekOptions trekOptions) error {
 					trekState.selectedAllocationGroup = index
 				}
 			}
+
 			if trekState.selectedAllocationGroup < 0 || trekState.selectedAllocationGroup > len(trekState.CurrentTaskGroups())-1 {
+
 				// No such task group found, display available ones
 				fmt.Printf("Unknown task group.  Available task groups:\n")
 				for _, tg := range trekState.CurrentTaskGroups() {
 					fmt.Printf("* %s\n", *tg.Name)
 				}
-				os.Exit(1)
+
 			} else {
 				// No allocation provided by the user, display all of them
 				if trekOptions.allocationIndex == -1 {
+
 					if trekOptions.displayFormat == "" {
-						// Show all selected task group's allocation
-						for index, alloc := range trekState.CurrentAllocations() {
-							fmt.Printf("(%d) %s\n", index, alloc.Name)
-						}
-					} else {
-						// use the formatter
-						provider := taskGroupFormatProvider{
-							Allocations: buildAllocations(trekState.CurrentAllocations()),
-						}
-						trekPrintDetails(os.Stdout, trekOptions.displayFormat, provider)
+						trekOptions.displayFormat = allocationsFormat
 					}
+
+					provider := taskGroupFormatProvider{
+						Allocations: buildAllocations(trekState.CurrentAllocations()),
+					}
+					trekPrintDetails(os.Stdout, trekOptions.displayFormat, provider)
+
 				} else {
 					trekState.selectedAllocationIndex = trekOptions.allocationIndex
+
 					if trekOptions.allocationIndex < 0 || trekOptions.allocationIndex > len(trekState.CurrentAllocations())-1 {
+
 						// out of bounds, show existing ones
 						fmt.Printf("Allocation index %d out-of-bounds.  Valid indices:\n", trekOptions.allocationIndex)
 						for index, alloc := range trekState.CurrentAllocations() {
 							fmt.Printf("(%d) %s\n", index, alloc.Name)
 						}
+
 					} else {
-						//////////////////
+
 						// Allocation found, no task provided by user
 						if trekOptions.taskName == "" {
+
 							if trekOptions.displayFormat == "" {
-								// display all of them
-								for _, task := range trekState.Tasks() {
-									fmt.Printf("* %s\n", task.Name)
-								}
-							} else {
-								// use the formatter
-								provider := allocationFormatProvider{
-									IP:    trekState.CurrentAllocation().IP(),
-									Tasks: buildTasks(trekState.Tasks()),
-								}
-								trekPrintDetails(os.Stdout, trekOptions.displayFormat, provider)
+								trekOptions.displayFormat = allocationDetailsFormat
 							}
+
+							provider := allocationFormatProvider{
+								IP:    trekState.CurrentAllocation().IP(),
+								Tasks: buildTasks(trekState.Tasks()),
+							}
+							trekPrintDetails(os.Stdout, trekOptions.displayFormat, provider)
+
 						} else {
 
 							// Find task
@@ -128,20 +120,21 @@ func runCommand(trekOptions trekOptions) error {
 									fmt.Printf("* %s\n", task.Name)
 								}
 							} else {
-								// Show task details
-								if trekOptions.displayFormat == "" {
-									trekState.FprintCurrentTask(os.Stdout)
-								} else {
-									alloc := trekState.CurrentAllocation()
-									task := trekState.CurrentTask()
 
-									provider := taskFormatProvider{
-										IP:          alloc.IP(),
-										Network:     buildNetwork(alloc.allocation.TaskResources[task.Name].Networks),
-										Environment: buildEnv(task.Env),
-									}
-									trekPrintDetails(os.Stdout, trekOptions.displayFormat, provider)
+								if trekOptions.displayFormat == "" {
+									trekOptions.displayFormat = taskDetailsFormat
 								}
+
+								alloc := trekState.CurrentAllocation()
+								task := trekState.CurrentTask()
+
+								provider := taskFormatProvider{
+									Task:        trekTask{Name: task.Name, Driver: task.Driver, Config: task.Config},
+									Node:        trekNode{Name: alloc.node.Name, IP: alloc.IP()},
+									Network:     buildNetwork(alloc.allocation.TaskResources[task.Name].Networks),
+									Environment: buildEnv(task.Env),
+								}
+								trekPrintDetails(os.Stdout, trekOptions.displayFormat, provider)
 							}
 						}
 					}
@@ -154,69 +147,4 @@ func runCommand(trekOptions trekOptions) error {
 		os.Exit(1)
 	}
 	return nil
-}
-
-func buildNetwork(networks []*api.NetworkResource) trekCommandNetwork {
-	network := trekCommandNetwork{}
-	network.Ports = map[string]trekCommandPort{}
-
-	if len(networks) > 1 {
-		log.Panicf("Found more than one network.  Exiting...")
-	}
-	for _, reservedPort := range networks[0].ReservedPorts {
-		network.Ports[reservedPort.Label] = trekCommandPort{Value: reservedPort.Value, Reserved: true}
-	}
-	for _, dynPort := range networks[0].DynamicPorts {
-		network.Ports[dynPort.Label] = trekCommandPort{Value: dynPort.Value, Reserved: false}
-	}
-
-	return network
-}
-
-func buildEnv(env map[string]string) trekCommandEnvironment {
-	resultingEnv := trekCommandEnvironment{}
-	for key, value := range env {
-		resultingEnv[key] = trekCommandEnvironmentVariable{Value: value}
-	}
-	return resultingEnv
-}
-
-func buildTasks(tasks []*nomad.Task) []trekTask {
-	result := make([]trekTask, 0)
-
-	for _, task := range tasks {
-		result = append(result, trekTask{Name: task.Name})
-	}
-
-	return result
-}
-
-func buildAllocations(allocs []nomad.Allocation) []trekAllocation {
-	result := make([]trekAllocation, 0)
-
-	for _, alloc := range allocs {
-		result = append(result, trekAllocation{Name: alloc.Name})
-	}
-
-	return result
-}
-
-func buildTaskGroups(tgs []*nomad.TaskGroup) []trekTaskGroup {
-	result := make([]trekTaskGroup, 0)
-
-	for _, taskGroup := range tgs {
-		result = append(result, trekTaskGroup{Name: *taskGroup.Name})
-	}
-
-	return result
-}
-
-func buildJobs(jobs []nomad.Job) []trekJob {
-	result := make([]trekJob, 0)
-
-	for _, job := range jobs {
-		result = append(result, trekJob{Name: *job.Name})
-	}
-
-	return result
 }

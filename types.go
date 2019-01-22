@@ -5,7 +5,6 @@ import (
 	"html/template"
 	"io"
 	"log"
-	"os"
 	"sort"
 
 	"github.com/hashicorp/nomad/api"
@@ -177,19 +176,26 @@ type binding struct {
 	handler   uiHandlerWithStateType
 }
 
+type trekNode struct {
+	Name string
+	IP   string
+}
+
 type taskFormatProvider struct {
-	IP          string
+	Task        trekTask
+	Node        trekNode
 	Network     trekCommandNetwork
 	Environment trekCommandEnvironment
 }
 
 type trekCommandNetwork struct {
-	Ports map[string]trekCommandPort
+	DynamicPorts  []trekCommandPort
+	ReservedPorts []trekCommandPort
 }
 
 type trekCommandPort struct {
-	Value    int
-	Reserved bool // if not reserved? it's dynamic
+	Name   string
+	Number int
 }
 
 type trekCommandEnvironment map[string]trekCommandEnvironmentVariable
@@ -211,7 +217,7 @@ func trekPrintDetails(w io.Writer, format string, data interface{}) {
 	if err != nil {
 		panic(err)
 	}
-	err = tmpl.Execute(os.Stdout, data)
+	err = tmpl.Execute(w, data)
 	if err != nil {
 		panic(err)
 	}
@@ -223,7 +229,9 @@ type allocationFormatProvider struct {
 }
 
 type trekTask struct {
-	Name string
+	Name   string
+	Driver string
+	Config map[string]interface{}
 }
 
 type taskGroupFormatProvider struct {

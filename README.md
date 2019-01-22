@@ -88,8 +88,10 @@ Here's a list of options available:
 ```
 
 <a name="display-format"></a>
-* `display-format`: Use the [Go templating language][go-templating] to format output when describing a specific allocation or task
+* `display-format`: Use the [Go templating language][go-templating] to format output when describing a specific job, task group, allocation or task
   * Context-specific data made available:
+    * Job
+      * `TaskGroups` (array of task groups): task groups part of the job definition
     * Task Group
       * `Allocations` (array of allocations): allocations run by that task group
     * Allocation

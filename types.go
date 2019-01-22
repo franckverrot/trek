@@ -233,3 +233,11 @@ type taskGroupFormatProvider struct {
 type trekAllocation struct {
 	Name string
 }
+
+type jobFormatProvider struct {
+	TaskGroups []trekTaskGroup
+}
+
+type trekTaskGroup struct {
+	Name string
+}

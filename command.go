@@ -35,9 +35,17 @@ func runCommand(trekOptions trekOptions) error {
 		}
 
 		if trekOptions.taskGroup == "" {
-			// If no task group provided by the user, display the available ones
-			for _, tg := range trekState.CurrentTaskGroups() {
-				fmt.Printf("* %s\n", *tg.Name)
+			if trekOptions.displayFormat == "" {
+				// If no task group provided by the user, display the available ones
+				for _, tg := range trekState.CurrentTaskGroups() {
+					fmt.Printf("* %s?\n", *tg.Name)
+				}
+			} else {
+				// use the formatter
+				provider := jobFormatProvider{
+					TaskGroups: buildTaskGroups(trekState.CurrentTaskGroups()),
+				}
+				trekPrintDetails(os.Stdout, trekOptions.displayFormat, provider)
 			}
 		} else {
 			// Find task group provided by the user
@@ -179,6 +187,16 @@ func buildAllocations(allocs []nomad.Allocation) []trekAllocation {
 
 	for _, alloc := range allocs {
 		result = append(result, trekAllocation{Name: alloc.Name})
+	}
+
+	return result
+}
+
+func buildTaskGroups(tgs []*nomad.TaskGroup) []trekTaskGroup {
+	result := make([]trekTaskGroup, 0)
+
+	for _, taskGroup := range tgs {
+		result = append(result, trekTaskGroup{Name: *taskGroup.Name})
 	}
 
 	return result

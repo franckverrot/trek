@@ -1,7 +1,11 @@
 package main
 
 import (
+	"fmt"
+	"html/template"
+	"io"
 	"log"
+	"os"
 	"sort"
 
 	"github.com/hashicorp/nomad/api"
@@ -192,4 +196,23 @@ type trekCommandEnvironment map[string]trekCommandEnvironmentVariable
 
 type trekCommandEnvironmentVariable struct {
 	Value string
+}
+
+func trekPrintDetails(w io.Writer, format string, data interface{}) {
+
+	tmpl, err := template.
+		New("output").
+		Funcs(template.FuncMap{
+			"Debug":    func(structure interface{}) string { return fmt.Sprintf("DEBUG: %+v\n", structure) },
+			"DebugAll": func() string { return fmt.Sprintf("DEBUG ALL: %+v\n", data) },
+		}).
+		Parse(format)
+
+	if err != nil {
+		panic(err)
+	}
+	err = tmpl.Execute(os.Stdout, data)
+	if err != nil {
+		panic(err)
+	}
 }

@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"html/template"
 	"log"
 	"os"
 
@@ -105,28 +104,11 @@ func runCommand(trekOptions trekOptions) error {
 										Network:     buildNetwork(alloc.allocation.TaskResources[task.Name].Networks),
 										Environment: buildEnv(task.Env),
 									}
-									tmpl, err := template.
-										New("output").
-										Funcs(template.FuncMap{
-											"Debug":    func(structure interface{}) string { return fmt.Sprintf("DEBUG: %+v\n", structure) },
-											"DebugAll": func() string { return fmt.Sprintf("DEBUG ALL: %+v\n", provider) },
-										}).
-										Parse(trekOptions.displayFormat)
-
-									if err != nil {
-										panic(err)
-									}
-									err = tmpl.Execute(os.Stdout, provider)
-									if err != nil {
-										panic(err)
-									}
-									fmt.Println()
+									trekPrintDetails(os.Stdout, trekOptions.displayFormat, provider)
 								}
 							}
-
 						}
 					}
-
 				}
 			}
 		}

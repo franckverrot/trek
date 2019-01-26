@@ -79,6 +79,21 @@ func confirmTaskSelection(g *gocui.Gui, v *gocui.View, trekState *trekStateType)
 	}
 	return nil
 }
+func openPopup(g *gocui.Gui, v *gocui.View, trekState *trekStateType, text string) error {
+	maxX, maxY := g.Size()
+	views := g.Views()
+	if v, err := g.SetView("popup", maxX/2-30, maxY/2, maxX/2+30, maxY/2+2); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		trekState.lastView = views[len(views)-1]
+		fmt.Fprintln(v, text)
+		if _, err := g.SetCurrentView("popup"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 func quit(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 	return gocui.ErrQuit
@@ -126,7 +141,7 @@ func selectCluster(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error 
 				}
 
 				for _, job := range trekState.Jobs() {
-					fmt.Fprintf(view, "%s (%s)\n", *(job.Name), *(job.ID))
+					fmt.Fprintf(view, "%s (%s)\n", *(job.ID), *(job.Status))
 				}
 
 				return nil
@@ -262,6 +277,37 @@ func selectTask(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 	)
 }
 
+func garbageCollect(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
+	var msg string
+	err := trekState.client.System().GarbageCollect()
+	if err != nil {
+		msg = "failed (%+v)"
+	} else {
+		msg = "is done"
+	}
+
+	return openPopup(g, v, trekState, fmt.Sprintf("Garbage collection %s\n", msg, err))
+}
+func refreshCurrentView(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
+	return nil
+}
+
+func dismissPopup() uiHandlerWithStateType {
+	return func(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
+		if err := g.DeleteView("popup"); err != nil {
+			return err
+		}
+		// pop current view (should be popup)
+		// get last used view
+		lastView := trekState.lastView
+		trekState.lastView = nil
+		if _, err := g.SetCurrentView(lastView.Name()); err != nil {
+			return err
+		}
+		return nil
+	}
+}
+
 func deleteView(currentView string, newCurrentView string, handler deleteViewCallback) uiHandlerWithStateType {
 	return func(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 		if err := g.DeleteView(currentView); err != nil {
@@ -351,6 +397,9 @@ var bindings = []binding{
 
 	binding{panelName: "", key: gocui.KeyCtrlC, handler: quit},
 	binding{panelName: "", key: gocui.KeyF12, handler: quit},
+	binding{panelName: "", key: gocui.KeyF2, handler: garbageCollect},
+	binding{panelName: "", key: gocui.KeyF5, handler: refreshCurrentView},
+	binding{panelName: "popup", key: gocui.KeyEnter, handler: dismissPopup()},
 	binding{panelName: "msg", key: gocui.KeyEnter,
 		handler: deleteView("msg", "Allocations", func(trekState *trekStateType) {})},
 }
@@ -389,13 +438,8 @@ func getBounds(maxX int, maxY int, currentPanel int, totalPanels int, margin int
 		endY:   endY - margin}
 }
 
-var initialized = false
-
 func layout(trekState *trekStateType) layoutType {
 	return func(g *gocui.Gui) error {
-		if initialized {
-			return nil
-		}
 		title := "Trek"
 
 		// Show menu
@@ -417,8 +461,8 @@ func layout(trekState *trekStateType) layoutType {
 			offset += len(title)
 		}
 
-		offset += 2
-		menuItems := []string{"F1:DEBUG", "F12:EXIT"}
+		offset += 6
+		menuItems := []string{"F1:DEBUG", "F2:GC", "F5:REFRESH", "F12:EXIT"}
 
 		if v, err := g.SetView("menu_items", startX+offset, startY, endX, endY); err != nil {
 			if err != gocui.ErrUnknownView {
@@ -429,6 +473,7 @@ func layout(trekState *trekStateType) layoutType {
 			v.BgColor = gocui.ColorGreen
 			v.FgColor = gocui.ColorBlack
 
+			fmt.Fprintf(v, " ")
 			for index, optionName := range menuItems {
 				if index > 0 {
 					fmt.Fprintf(v, " | ")
@@ -436,51 +481,53 @@ func layout(trekState *trekStateType) layoutType {
 				fmt.Fprintf(v, "%s", optionName)
 			}
 		}
-
-		initialized = true
-		return createView(g,
-			trekView{
-				name:                    "Clusters",
-				foregroundAfterCreation: true,
-				panelNum:                0,
-				panelsTotal:             5,
-				margin:                  0,
-				handler: func(view *gocui.View, trekState *trekStateType) error {
-
-					view.Highlight = true
-					view.SelBgColor = gocui.ColorGreen
-					view.SelFgColor = gocui.ColorBlack
-					file, err := os.Open(".trek.rc")
-
-					if err != nil {
-						// Can't find configuration file, applying default configuration
-						address := os.Getenv("NOMAD_ADDR")
-						if address == "" {
-							// Defaulting on localhost
-							address = "http://localhost:4646"
-						}
-						trekState.nomadConnectConfiguration.addEnvironment("default", address)
-					} else {
-
-						decoder := json.NewDecoder(file)
-						trekState.nomadConnectConfiguration = configuration{}
-						err = decoder.Decode(&trekState.nomadConnectConfiguration)
-						if err != nil {
-							log.Panicln(err)
-						}
-
-					}
-
-					for _, env := range *trekState.nomadConnectConfiguration.Environments {
-						fmt.Fprintf(view, "%s\n", (env).Name)
-					}
-
-					return nil
-				},
-			},
-			trekState,
-		)
+		return nil
 	}
+}
+
+func listClusters(gui *gocui.Gui, trekState *trekStateType) error {
+	return createView(gui,
+		trekView{
+			name:                    "Clusters",
+			foregroundAfterCreation: true,
+			panelNum:                0,
+			panelsTotal:             5,
+			margin:                  0,
+			handler: func(view *gocui.View, trekState *trekStateType) error {
+
+				view.Highlight = true
+				view.SelBgColor = gocui.ColorGreen
+				view.SelFgColor = gocui.ColorBlack
+				file, err := os.Open(".trek.rc")
+
+				if err != nil {
+					// Can't find configuration file, applying default configuration
+					address := os.Getenv("NOMAD_ADDR")
+					if address == "" {
+						// Defaulting on localhost
+						address = "http://localhost:4646"
+					}
+					trekState.nomadConnectConfiguration.addEnvironment("default", address)
+				} else {
+
+					decoder := json.NewDecoder(file)
+					trekState.nomadConnectConfiguration = configuration{}
+					err = decoder.Decode(&trekState.nomadConnectConfiguration)
+					if err != nil {
+						log.Panicln(err)
+					}
+
+				}
+
+				for _, env := range *trekState.nomadConnectConfiguration.Environments {
+					fmt.Fprintf(view, "%s\n", (env).Name)
+				}
+
+				return nil
+			},
+		},
+		trekState,
+	)
 }
 
 func runUI(options trekOptions) {
@@ -496,6 +543,8 @@ func runUI(options trekOptions) {
 	g.Cursor = false
 
 	g.SetManagerFunc(layout(trekState))
+
+	listClusters(g, trekState)
 
 	if err := keybindings(g, trekState); err != nil {
 		log.Panicln(err)

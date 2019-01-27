@@ -61,6 +61,7 @@ type trekStateType struct {
 	client                    *nomad.Client
 	jobs                      []nomad.Job
 	nomadConnectConfiguration configuration
+	activeViews               []uiHandlerWithStateType
 	lastView                  *gocui.View
 }
 

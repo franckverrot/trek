@@ -120,7 +120,31 @@ func createView(g *gocui.Gui, view trekView, trekState *trekStateType) error {
 	return nil
 }
 
+type UIView string
+
+const (
+	Clusters UIView = "Clusters"
+	Jobs     UIView = "Jobs"
+)
+
+func (trekState *trekStateType) trackView(handler uiHandlerWithStateType) {
+	trekState.activeViews = append(trekState.activeViews, handler)
+}
+
+func (trekState *trekStateType) popView() {
+	trekState.activeViews = trekState.activeViews[:len(trekState.activeViews)-1]
+}
+
 func selectCluster(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
+	_, err := g.View("Jobs")
+
+	// if the view exists
+	if err == nil {
+		g.DeleteView("Jobs")
+	}
+
+	trekState.trackView(selectCluster)
+
 	return createView(g,
 		trekView{
 			name:                    "Jobs",
@@ -156,9 +180,19 @@ func selectJob(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 		return nil
 	}
 
+	viewName := "Task Groups"
+	_, err := g.View(viewName)
+
+	// if the view exists
+	if err == nil {
+		g.DeleteView(viewName)
+	}
+
+	trekState.trackView(selectJob)
+
 	return createView(g,
 		trekView{
-			name:                    "Task Groups",
+			name:                    viewName,
 			foregroundAfterCreation: true,
 			panelNum:                2,
 			panelsTotal:             5,
@@ -182,9 +216,19 @@ func selectJob(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 }
 
 func selectTaskGroup(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
+	viewName := "Allocations"
+	_, err := g.View(viewName)
+
+	// if the view exists
+	if err == nil {
+		g.DeleteView(viewName)
+	}
+
+	trekState.trackView(selectTaskGroup)
+
 	return createView(g,
 		trekView{
-			name:                    "Allocations",
+			name:                    viewName,
 			foregroundAfterCreation: true,
 			panelNum:                3,
 			panelsTotal:             5,
@@ -208,9 +252,19 @@ func selectTaskGroup(g *gocui.Gui, v *gocui.View, trekState *trekStateType) erro
 }
 
 func selectAllocation(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
+	viewName := "Tasks"
+	_, err := g.View(viewName)
+
+	// if the view exists
+	if err == nil {
+		g.DeleteView(viewName)
+	}
+
+	trekState.trackView(selectAllocation)
+
 	return createView(g,
 		trekView{
-			name:                    "Tasks",
+			name:                    viewName,
 			foregroundAfterCreation: true,
 			panelNum:                4,
 			panelsTotal:             5,
@@ -234,9 +288,19 @@ func selectAllocation(g *gocui.Gui, v *gocui.View, trekState *trekStateType) err
 }
 
 func selectTask(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
+	viewName := "Task"
+	_, err := g.View(viewName)
+
+	// if the view exists
+	if err == nil {
+		g.DeleteView(viewName)
+	}
+
+	trekState.trackView(selectTask)
+
 	return createView(g,
 		trekView{
-			name:                    "Task",
+			name:                    viewName,
 			foregroundAfterCreation: true,
 			panelNum:                0,
 			panelsTotal:             1,
@@ -286,9 +350,13 @@ func garbageCollect(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error
 		msg = "is done"
 	}
 
-	return openPopup(g, v, trekState, fmt.Sprintf("Garbage collection %s\n", msg, err))
+	return openPopup(g, v, trekState, fmt.Sprintf("Garbage collection %s\n", msg))
 }
-func refreshCurrentView(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
+
+func refreshUI(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
+	for _, viewHandler := range trekState.activeViews {
+		viewHandler(g, v, trekState)
+	}
 	return nil
 }
 
@@ -317,6 +385,7 @@ func deleteView(currentView string, newCurrentView string, handler deleteViewCal
 			return err
 		}
 		handler(trekState)
+		trekState.popView()
 		return nil
 	}
 }
@@ -398,7 +467,7 @@ var bindings = []binding{
 	binding{panelName: "", key: gocui.KeyCtrlC, handler: quit},
 	binding{panelName: "", key: gocui.KeyF12, handler: quit},
 	binding{panelName: "", key: gocui.KeyF2, handler: garbageCollect},
-	binding{panelName: "", key: gocui.KeyF5, handler: refreshCurrentView},
+	binding{panelName: "", key: gocui.KeyF5, handler: refreshUI},
 	binding{panelName: "popup", key: gocui.KeyEnter, handler: dismissPopup()},
 	binding{panelName: "msg", key: gocui.KeyEnter,
 		handler: deleteView("msg", "Allocations", func(trekState *trekStateType) {})},
@@ -486,6 +555,13 @@ func layout(trekState *trekStateType) layoutType {
 }
 
 func listClusters(gui *gocui.Gui, trekState *trekStateType) error {
+	_, err := gui.View("Clusters")
+
+	// if the view exists
+	if err == nil {
+		gui.DeleteView("Clusters")
+	}
+
 	return createView(gui,
 		trekView{
 			name:                    "Clusters",
@@ -544,6 +620,10 @@ func runUI(options trekOptions) {
 
 	g.SetManagerFunc(layout(trekState))
 
+	trekState.trackView(
+		func(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
+			return listClusters(g, trekState)
+		})
 	listClusters(g, trekState)
 
 	if err := keybindings(g, trekState); err != nil {

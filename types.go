@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -89,11 +90,16 @@ func (trekState *trekStateType) getNodeFromAllocation(alloc nomad.Allocation) ap
 	return *node
 }
 
-func (trekState *trekStateType) CurrentAllocation() allocation {
+func (trekState *trekStateType) CurrentAllocation() (allocation, error) {
 	index := trekState.selectedAllocationIndex
+
+	if index > len(trekState.foundAllocations)-1 {
+		return allocation{}, errors.New("allocation not found")
+	}
+
 	alloc := trekState.foundAllocations[index]
 	node := trekState.getNodeFromAllocation(alloc)
-	return allocation{allocation: alloc, node: node}
+	return allocation{allocation: alloc, node: node}, nil
 }
 func (trekState *trekStateType) CurrentJob() nomad.Job {
 	return trekState.jobs[trekState.selectedJob]

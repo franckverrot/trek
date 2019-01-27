@@ -311,16 +311,19 @@ func selectTask(g *gocui.Gui, v *gocui.View, trekState *trekStateType) error {
 				view.Editable = false
 				view.Wrap = false
 
-				alloc := trekState.CurrentAllocation()
-				task := trekState.CurrentTask()
+				alloc, err := trekState.CurrentAllocation()
 
-				provider := taskFormatProvider{
-					Task:        trekTask{Name: task.Name, Driver: task.Driver, Config: task.Config},
-					Node:        trekNode{Name: alloc.node.Name, IP: alloc.IP()},
-					Network:     buildNetwork(alloc.allocation.TaskResources[task.Name].Networks),
-					Environment: buildEnv(task.Env),
+				if err == nil {
+					task := trekState.CurrentTask()
+
+					provider := taskFormatProvider{
+						Task:        trekTask{Name: task.Name, Driver: task.Driver, Config: task.Config},
+						Node:        trekNode{Name: alloc.node.Name, IP: alloc.IP()},
+						Network:     buildNetwork(alloc.allocation.TaskResources[task.Name].Networks),
+						Environment: buildEnv(task.Env),
+					}
+					trekPrintDetails(view, taskDetailsFormat, provider)
 				}
-				trekPrintDetails(view, taskDetailsFormat, provider)
 				// if(trekState.debugModeEnabled) {
 				// val := reflect.Indirect(reflect.ValueOf(task))
 				// valType := val.Type()

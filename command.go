@@ -97,8 +97,9 @@ func runCommand(trekOptions trekOptions) error {
 								trekOptions.displayFormat = allocationDetailsFormat
 							}
 
+							alloc, _ := trekState.CurrentAllocation()
 							provider := allocationFormatProvider{
-								IP:    trekState.CurrentAllocation().IP(),
+								IP:    alloc.IP(),
 								Tasks: buildTasks(trekState.Tasks()),
 							}
 							trekPrintDetails(os.Stdout, trekOptions.displayFormat, provider)
@@ -125,7 +126,7 @@ func runCommand(trekOptions trekOptions) error {
 									trekOptions.displayFormat = taskDetailsFormat
 								}
 
-								alloc := trekState.CurrentAllocation()
+								alloc, _ := trekState.CurrentAllocation()
 								task := trekState.CurrentTask()
 
 								provider := taskFormatProvider{

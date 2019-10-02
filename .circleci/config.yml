@@ -13,9 +13,7 @@ jobs:
           keys:
             - v1-pkg-cache
 
-      - run: make setup
-
-      - run: make build
+      - run: make all
 
       - save_cache:
           key: v1-pkg-cache

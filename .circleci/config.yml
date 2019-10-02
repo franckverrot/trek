@@ -13,7 +13,7 @@ jobs:
           keys:
             - v1-pkg-cache
 
-      - run: make all
+      - run: GO111MODULE=on make all
 
       - save_cache:
           key: v1-pkg-cache

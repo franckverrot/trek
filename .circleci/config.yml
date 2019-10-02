@@ -1,0 +1,23 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: circleci/golang:1.11
+
+    working_directory: /go/src/github.com/franckverrot/trek
+
+    steps:
+      - checkout
+
+      - restore_cache:
+          keys:
+            - v1-pkg-cache
+
+      - run: make setup
+
+      - run: make build
+
+      - save_cache:
+          key: v1-pkg-cache
+          paths:
+            - "/go/pkg"
